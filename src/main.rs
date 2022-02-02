@@ -52,16 +52,17 @@ impl QuadCell {
         let thickness = thickness / 2.;
         let cell= QuadCell{
             verts: [
-                Vec2::new(0., -size),
-                Vec2::new(size, 0.),
-                Vec2::new(0., size),
-                Vec2::new(-size, 0.),
+                Vec2::new(0., -size) + position,
+                Vec2::new(size, 0.) + position,
+                Vec2::new(0., size) + position,
+                Vec2::new(-size, 0.) + position,
             ],
+  
             inner_verts:[
-                Vec2::new(0., -size + thickness),
-                Vec2::new(size - thickness, 0.),
-                Vec2::new(0., size - thickness),
-                Vec2::new(-size + thickness, 0.),
+                Vec2::new(0., -size + thickness) + position,
+                Vec2::new(size - thickness, 0.) + position,
+                Vec2::new(0., size - thickness) + position,
+                Vec2::new(-size + thickness, 0.) + position,
             ]
         };
 
@@ -102,19 +103,20 @@ struct Grid {
 }
 
 impl Grid{
-    fn new(octogone_side: u32, scale: f32, thickness: f32) -> Grid{
-        let octo_row = octogone_side;
+    fn new(side_number: u32, scale: f32, thickness: f32) -> Grid{
 
         let mut grid = Grid{
             cells: Vec::new(),
         };
 
-        let s = 1. / 3.;
+        for y_index in 0..=side_number {
+            for x_index in 0..=side_number {
+                let position = Vec2::new((x_index) as f32, (y_index) as f32) * scale;
+                grid.cells.push(Cell::Quad(QuadCell::new(position, scale * 2./3., thickness)));
 
-        for y_index in 0..octo_row {
-            for x_index in 0..octo_row {
-                let position = Vec2::new((x_index * 3) as f32, (y_index * 3) as f32) * scale;
-                grid.cells.push(Cell::Octogone(OctoCell::new(position, 3. * scale, thickness)));
+                if x_index < side_number && y_index < side_number{
+                    grid.cells.push(Cell::Octogone(OctoCell::new(position + Vec2::new(0.5 * scale, 0.5 * scale), scale, thickness)));
+                }
             }
         }
 
@@ -148,7 +150,7 @@ struct Game {
 }
 
 impl ggez::event::EventHandler<GameError> for Game {
-    fn update(&mut self, ctx: &mut Context) -> GameResult {
+    fn update(&mut self, _ctx: &mut Context) -> GameResult {
         Ok(())
     }
   
@@ -164,7 +166,7 @@ impl ggez::event::EventHandler<GameError> for Game {
 
 fn main() {
     let game_instance = Game {
-        grid: Grid::new(8, 25., 3.),
+        grid: Grid::new(8, 60., 2.),
     };
 
     let c = conf::Conf::new();
