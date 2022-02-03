@@ -11,7 +11,7 @@ impl OctoCell {
     fn new(position: Vec2, size: f32, thickness: f32) -> OctoCell {
         let cos = FRAC_PI_8.cos();
         let sin = FRAC_PI_8.sin();
-        let size = size * 0.5;
+        let size = size * 0.5 / cos;
         let inner_size = size - thickness / 2.;
         let cell = OctoCell{
                 verts:[
@@ -48,7 +48,7 @@ struct QuadCell {
 
 impl QuadCell {
     fn new(position: Vec2, size: f32, thickness: f32) -> QuadCell {
-        let size = size / 2.;
+        let size = size * FRAC_PI_8.cos() / 2.;
         let thickness = thickness / 2.;
         let cell= QuadCell{
             verts: [
@@ -78,13 +78,15 @@ enum Cell {
 impl Cell {
     fn build_mesh(&self, mesh_builder: &mut MeshBuilder) {
         let mut vertices = Vec::new();
+        let octo_color = graphics::Color::new(1., 1., 1., 0.5);
         match self {
             Cell::Octogone(octo_cell) => {
                 for vert in octo_cell.inner_verts {
                     vertices.push(mint::Point2{x:vert.x, y:vert.y});
                 }
 
-                mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &vertices, graphics::Color::WHITE).unwrap();
+                mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &vertices, octo_color).unwrap();
+                vertices.clear();
             },
 
             Cell::Quad(quad_cell) =>{
@@ -93,6 +95,7 @@ impl Cell {
                 }
 
                 mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &vertices, graphics::Color::RED).unwrap();
+                vertices.clear();
             }
         }
     }
@@ -113,7 +116,14 @@ impl Grid{
             for x_index in 0..=side_number {
                 let position = Vec2::new((x_index) as f32, (y_index) as f32) * scale;
                 grid.cells.push(Cell::Quad(QuadCell::new(position, scale * 2./3., thickness)));
+            }
+        }
+        
 
+
+        for y_index in 0..=side_number {
+            for x_index in 0..=side_number {
+                let position = Vec2::new((x_index) as f32, (y_index) as f32) * scale;
                 if x_index < side_number && y_index < side_number{
                     grid.cells.push(Cell::Octogone(OctoCell::new(position + Vec2::new(0.5 * scale, 0.5 * scale), scale, thickness)));
                 }
@@ -166,7 +176,7 @@ impl ggez::event::EventHandler<GameError> for Game {
 
 fn main() {
     let game_instance = Game {
-        grid: Grid::new(8, 60., 2.),
+        grid: Grid::new(4, 200., 0.),
     };
 
     let c = conf::Conf::new();
