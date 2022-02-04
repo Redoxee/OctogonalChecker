@@ -1,6 +1,5 @@
 use ggez::{*, graphics::MeshBuilder};
 use glam::Vec2;
-use std::f32::consts::*;
 
 struct OctoCell {
     verts : [Vec2; 8],
@@ -8,32 +7,32 @@ struct OctoCell {
 }
 
 impl OctoCell {
-    fn new(position: Vec2, size: f32, thickness: f32) -> OctoCell {
-        let cos = FRAC_PI_8.cos();
-        let sin = FRAC_PI_8.sin();
-        let size = size * 0.5 / cos;
+    fn new(position: Vec2, octogon_ratio: f32, size: f32, thickness: f32) -> OctoCell {
+        let half = octogon_ratio * size;
+
         let inner_size = size - thickness / 2.;
+        let inner_half = octogon_ratio * (size - thickness/2.);
         let cell = OctoCell{
                 verts:[
-                    Vec2::new(cos, sin) * size + position,
-                    Vec2::new(sin, cos) * size + position,
-                    Vec2::new(-sin, cos) * size + position,
-                    Vec2::new(-cos, sin) * size + position,
-                    Vec2::new(-cos, -sin) * size + position,
-                    Vec2::new(-sin, -cos) * size + position,
-                    Vec2::new(sin, -cos) * size + position,
-                    Vec2::new(cos, -sin) * size + position,
+                    Vec2::new(size, half) + position,
+                    Vec2::new(half, size) + position,
+                    Vec2::new(-half, size) + position,
+                    Vec2::new(-size, half) + position,
+                    Vec2::new(-size, -half) + position,
+                    Vec2::new(-half, -size) + position,
+                    Vec2::new(half, -size) + position,
+                    Vec2::new(size, -half) + position,
                 ],
 
                 inner_verts :[
-                    Vec2::new(cos, sin) * inner_size + position,
-                    Vec2::new(sin, cos) * inner_size + position,
-                    Vec2::new(-sin, cos) * inner_size + position,
-                    Vec2::new(-cos, sin) * inner_size + position,
-                    Vec2::new(-cos, -sin) * inner_size + position,
-                    Vec2::new(-sin, -cos) * inner_size + position,
-                    Vec2::new(sin, -cos) * inner_size + position,
-                    Vec2::new(cos, -sin) * inner_size + position,
+                    Vec2::new(inner_size, inner_half) + position,
+                    Vec2::new(inner_half, inner_size) + position,
+                    Vec2::new(-inner_half, inner_size) + position,
+                    Vec2::new(-inner_size, inner_half) + position,
+                    Vec2::new(-inner_size, -inner_half) + position,
+                    Vec2::new(-inner_half, -inner_size) + position,
+                    Vec2::new(inner_half, -inner_size) + position,
+                    Vec2::new(inner_size, -inner_half) + position,
                 ],
         };
 
@@ -47,8 +46,8 @@ struct QuadCell {
 }
 
 impl QuadCell {
-    fn new(position: Vec2, size: f32, thickness: f32) -> QuadCell {
-        let size = size * FRAC_PI_8.cos() / 2.;
+    fn new(position: Vec2, octogon_ratio: f32, size: f32, thickness: f32) -> QuadCell {
+        let size = size * (1. - octogon_ratio);
         let thickness = thickness / 2.;
         let cell= QuadCell{
             verts: [
@@ -103,19 +102,27 @@ impl Cell {
 
 struct Grid {
     cells: Vec<Cell>,
+    scale: f32,
+    octogon_ratio: f32,
 }
 
 impl Grid{
-    fn new(side_number: u32, scale: f32, thickness: f32) -> Grid{
+    fn new(side_number: u32, octogon_ratio: f32, scale: f32, thickness: f32) -> Grid{
 
         let mut grid = Grid{
             cells: Vec::new(),
+            octogon_ratio,
+            scale,
         };
+
+        let half_cell_gap = scale;
+        let cell_gap = half_cell_gap * 2.;
+        let octo_delta = Vec2::new(half_cell_gap, half_cell_gap);
 
         for y_index in 0..=side_number {
             for x_index in 0..=side_number {
-                let position = Vec2::new((x_index) as f32, (y_index) as f32) * scale;
-                grid.cells.push(Cell::Quad(QuadCell::new(position, scale * 2./3., thickness)));
+                let position = Vec2::new((x_index) as f32, (y_index) as f32) * cell_gap;
+                grid.cells.push(Cell::Quad(QuadCell::new(position, octogon_ratio, scale, thickness)));
             }
         }
         
@@ -123,9 +130,9 @@ impl Grid{
 
         for y_index in 0..=side_number {
             for x_index in 0..=side_number {
-                let position = Vec2::new((x_index) as f32, (y_index) as f32) * scale;
+                let position = Vec2::new((x_index) as f32, (y_index) as f32) * cell_gap;
                 if x_index < side_number && y_index < side_number{
-                    grid.cells.push(Cell::Octogone(OctoCell::new(position + Vec2::new(0.5 * scale, 0.5 * scale), scale, thickness)));
+                    grid.cells.push(Cell::Octogone(OctoCell::new(position + octo_delta, octogon_ratio, scale, thickness)));
                 }
             }
         }
@@ -167,7 +174,8 @@ impl ggez::event::EventHandler<GameError> for Game {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, graphics::Color::BLACK);
 
-        self.grid.draw(ctx, Vec2::new(30., 30.))?;
+        let delta = self.grid.octogon_ratio * self.grid.scale * 2. + 10.;
+        self.grid.draw(ctx, Vec2::new(delta, delta))?;
 
         graphics::present(ctx)?;
         Ok(())
@@ -176,12 +184,21 @@ impl ggez::event::EventHandler<GameError> for Game {
 
 fn main() {
     let game_instance = Game {
-        grid: Grid::new(4, 200., 0.),
+        grid: Grid::new(8, 0.3, 40., 5.),
     };
 
-    let c = conf::Conf::new();
+    let mut c = conf::Conf::new();
+    c.window_mode.width = 920_f32;
+    c.window_mode.height = 920_f32;
     let (ctx, event_loop) = ContextBuilder::new("OctoChess", "AntonMakesGames")
     .default_conf(c)
+    .window_setup(conf::WindowSetup{
+        title:String::from("Octogonal chess"),
+        samples: conf::NumSamples::One,
+        vsync: true,
+        srgb:true,
+        icon:"".to_owned(),
+    })
     .build()
     .unwrap();
 
