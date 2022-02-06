@@ -1,9 +1,10 @@
 use ggez::{*, graphics::MeshBuilder};
-use glam::Vec2;
+use glam::*;
 
 struct OctoCell {
     verts : [Vec2; 8],
     inner_verts : [Vec2; 8],
+    position : Vec2,
 }
 
 impl OctoCell {
@@ -34,6 +35,8 @@ impl OctoCell {
                     Vec2::new(inner_half, -inner_size) + position,
                     Vec2::new(inner_size, -inner_half) + position,
                 ],
+
+                position,
         };
 
         cell
@@ -43,6 +46,7 @@ impl OctoCell {
 struct QuadCell {
     verts : [Vec2; 4],
     inner_verts : [Vec2; 4],
+    position : Vec2,
 }
 
 impl QuadCell {
@@ -62,7 +66,9 @@ impl QuadCell {
                 Vec2::new(size - thickness, 0.) + position,
                 Vec2::new(0., size - thickness) + position,
                 Vec2::new(-size + thickness, 0.) + position,
-            ]
+            ],
+
+            position,
         };
 
         cell
@@ -210,9 +216,13 @@ impl Grid{
         mesh_builder.build(ctx).unwrap()
     }
 
-    fn get_index_from_coord(&self, x: u32, y: u32) -> u32
+    fn get_index_from_coord(&self, coord: &CellCoord) -> u32
     {
-        y.min(self.cell_on_side) * self.cell_on_side + x
+        match (coord.y.min(self.cell_on_side as i32) * (self.cell_on_side as i32) + coord.x).try_into()
+        {
+            Ok(index) => index,
+            Err(e) => panic!("Coord out of bound! {}", e)
+        }
     }
 
     fn get_cell_at(&self, position: Vec2) -> IsCell{
@@ -221,13 +231,25 @@ impl Grid{
         }
 
         let coord = position - self.position;
-        let meta_x = (coord.x / self.scale / 2_f32).floor() as i32;
-        let meta_y = (coord.y/ self.scale / 2_f32).floor() as i32;
-        if meta_x < self.cell_on_side as i32 {
-            
+        let base_x = (coord.x / self.scale / 2_f32).floor() as i32;
+        let base_y = (coord.y / self.scale / 2_f32).floor() as i32;
+        println!("Pressed big square [{},{}]", base_x, base_y);
+
+        let base_x = base_x.clamp(0, self.cell_on_side as i32);
+        let base_y = base_y.clamp(0, self.cell_on_side as i32);
+
+        let mut possible_coord = Vec::new();
+        possible_coord.push(CellCoord{x: base_x, y: base_y});
+        possible_coord.push(CellCoord{x: base_x + 1, y: base_y});
+        possible_coord.push(CellCoord{x: base_x + 2, y: base_y});
+        possible_coord.push(CellCoord{x: base_x, y: base_y + 1});
+        possible_coord.push(CellCoord{x: base_x + 2, y: base_y + 1});
+
+        for coord in possible_coord{
+            println!("[{},{}] = {}", coord.x, coord.y, self.get_index_from_coord(&coord));
         }
 
-        let coord = Vec2::new(coord.x / self.scale / 2_f32, coord.y / self.scale / 2_f32);
+        let coord = Vec2::new(0_f32 , 0_f32);
         
         return IsCell::Yes(CellCoord{x: coord.x.floor() as i32, y: coord.y.floor() as i32})
     }
@@ -236,6 +258,21 @@ impl Grid{
         
         let mesh = self.build_mesh(ctx);
         graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(self.position))?;
+        for index in 0..self.cells.len(){
+            let label = graphics::Text::new(index.to_string());
+            let hf = Vec2::new(label.width(&ctx)/ 2_f32, label.height(&ctx) / 2_f32);
+            match &self.cells[index] {
+                Cell::Octogone(cell) => 
+                {
+                    graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.position + cell.position - hf))?;
+                },
+
+                Cell::Quad(cell) =>
+                {
+                    graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.position + cell.position - hf))?;
+                }
+            }
+        }
 
         Ok(())
     }
@@ -243,6 +280,7 @@ impl Grid{
 
 struct Game {
     grid: Grid,
+    was_pressed: bool,
     is_pressed: bool,
     hovered_cell: IsCell,
 }
@@ -251,6 +289,7 @@ impl Game {
     fn new(grid : Grid) -> Game{
         Game{
             grid,
+            was_pressed: false,
             is_pressed: false,
             hovered_cell: IsCell::No,
         }
@@ -260,10 +299,13 @@ impl Game {
 impl ggez::event::EventHandler<GameError> for Game {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse_position = input::mouse::position(ctx);
-        
+        self.was_pressed = self.is_pressed;
         self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
         let mouse_position = Vec2::new(mouse_position.x, mouse_position.y);
-        self.hovered_cell = self.grid.get_cell_at(mouse_position);
+        if !self.was_pressed && self.is_pressed {
+            println!("PRESS");
+            self.hovered_cell = self.grid.get_cell_at(mouse_position);
+        }
 
         Ok(())
     }
