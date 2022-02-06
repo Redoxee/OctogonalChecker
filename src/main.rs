@@ -98,40 +98,100 @@ impl Cell {
             }
         }
     }
+
+    fn contain_position(&self, position: &Vec2) -> bool{
+        let mut angle = 0_f32;
+        match self {
+            Cell::Octogone(cell) =>
+            {
+                for vertice in cell.verts {
+                    if *position == vertice {
+                        return true
+                    }
+
+                    angle += position.angle_between(vertice);
+                }
+            }
+
+            Cell::Quad(cell) =>
+            {
+                for vertice in cell.verts {
+                    if *position == vertice {
+                        return true
+                    }
+
+                    angle += position.angle_between(vertice);
+                }
+            }
+        }
+
+        return angle != 0_f32;
+    }
+}
+
+struct BoundingBox{
+    x: f32,
+    right: f32,
+    top: f32,
+    y: f32,
+}
+
+impl BoundingBox{
+    fn new(x: f32, y: f32, width: f32, height:f32) -> BoundingBox{
+        BoundingBox{
+            x,
+            y,
+            right: x + width,
+            top: y + height,
+        }
+    }
+
+    fn is_in(&self, position: &Vec2) -> bool{
+        position.x >= self.x && position.y >= self.y && position.x <= self.right && position.y <= self.top
+    }
 }
 
 struct Grid {
     cells: Vec<Cell>,
+    cell_on_side: u32,
+    position: Vec2,
     scale: f32,
-    octogon_ratio: f32,
+    bounding_box: BoundingBox,
+}
+
+struct CellCoord{
+    x:i32,
+    y:i32,
+}
+
+enum IsCell
+{
+    No,
+    Yes(CellCoord),
 }
 
 impl Grid{
-    fn new(side_number: u32, octogon_ratio: f32, scale: f32, thickness: f32) -> Grid{
-
+    fn new(octogon_on_side: u32, octogon_ratio: f32, position: Vec2, scale: f32, thickness: f32) -> Grid{
+        let cell_on_side = octogon_on_side * 2;
+        let bb_scale = scale * (cell_on_side + 2) as f32;
         let mut grid = Grid{
             cells: Vec::new(),
-            octogon_ratio,
+            cell_on_side,
+            position,
             scale,
+            bounding_box: BoundingBox::new(position.x - scale, position.y - scale, bb_scale, bb_scale)
         };
 
         let half_cell_gap = scale;
         let cell_gap = half_cell_gap * 2.;
         let octo_delta = Vec2::new(half_cell_gap, half_cell_gap);
 
-        for y_index in 0..=side_number {
-            for x_index in 0..=side_number {
+        for y_index in 0..=octogon_on_side {
+            for x_index in 0..=octogon_on_side {
                 let position = Vec2::new((x_index) as f32, (y_index) as f32) * cell_gap;
                 grid.cells.push(Cell::Quad(QuadCell::new(position, octogon_ratio, scale, thickness)));
-            }
-        }
-        
 
-
-        for y_index in 0..=side_number {
-            for x_index in 0..=side_number {
-                let position = Vec2::new((x_index) as f32, (y_index) as f32) * cell_gap;
-                if x_index < side_number && y_index < side_number{
+                if x_index < octogon_on_side && y_index < octogon_on_side{
                     grid.cells.push(Cell::Octogone(OctoCell::new(position + octo_delta, octogon_ratio, scale, thickness)));
                 }
             }
@@ -149,14 +209,33 @@ impl Grid{
         
         mesh_builder.build(ctx).unwrap()
     }
-}
 
-impl Grid
-{
-    fn draw(&mut self, ctx: &mut Context, position: Vec2) -> GameResult {
+    fn get_index_from_coord(&self, x: u32, y: u32) -> u32
+    {
+        y.min(self.cell_on_side) * self.cell_on_side + x
+    }
+
+    fn get_cell_at(&self, position: Vec2) -> IsCell{
+        if !self.bounding_box.is_in(&position) {
+            return IsCell::No
+        }
+
+        let coord = position - self.position;
+        let meta_x = (coord.x / self.scale / 2_f32).floor() as i32;
+        let meta_y = (coord.y/ self.scale / 2_f32).floor() as i32;
+        if meta_x < self.cell_on_side as i32 {
+            
+        }
+
+        let coord = Vec2::new(coord.x / self.scale / 2_f32, coord.y / self.scale / 2_f32);
+        
+        return IsCell::Yes(CellCoord{x: coord.x.floor() as i32, y: coord.y.floor() as i32})
+    }
+    
+    fn draw(&mut self, ctx: &mut Context) -> GameResult {
         
         let mesh = self.build_mesh(ctx);
-        graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(position))?;
+        graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(self.position))?;
 
         Ok(())
     }
@@ -164,32 +243,63 @@ impl Grid
 
 struct Game {
     grid: Grid,
+    is_pressed: bool,
+    hovered_cell: IsCell,
+}
+
+impl Game {
+    fn new(grid : Grid) -> Game{
+        Game{
+            grid,
+            is_pressed: false,
+            hovered_cell: IsCell::No,
+        }
+    }
 }
 
 impl ggez::event::EventHandler<GameError> for Game {
-    fn update(&mut self, _ctx: &mut Context) -> GameResult {
+    fn update(&mut self, ctx: &mut Context) -> GameResult {
+        let mouse_position = input::mouse::position(ctx);
+        
+        self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
+        let mouse_position = Vec2::new(mouse_position.x, mouse_position.y);
+        self.hovered_cell = self.grid.get_cell_at(mouse_position);
+
         Ok(())
     }
   
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, graphics::Color::BLACK);
 
-        let delta = self.grid.octogon_ratio * self.grid.scale * 2. + 10.;
-        self.grid.draw(ctx, Vec2::new(delta, delta))?;
+        self.grid.draw(ctx)?;
+
+        if self.is_pressed
+        {
+            match &self.hovered_cell{
+                IsCell::No=>{},
+                IsCell::Yes(coord)=>{
+                    let label = format!("[{},{}]", coord.x, coord.y);
+                    let label = graphics::Text::new(label);
+                    graphics::draw(ctx, &label, graphics::DrawParam::default())?;
+                }
+            }
+        }
 
         graphics::present(ctx)?;
         Ok(())
     }
 }
 
-fn main() {
-    let game_instance = Game {
-        grid: Grid::new(8, 0.3, 40., 5.),
-    };
+fn main(){
+
+    let grid_position = Vec2::new(100., 100.);
+    let game_instance = Game::new(
+        Grid::new(2, 0.3, grid_position, 40., 5.),
+    );
 
     let mut c = conf::Conf::new();
-    c.window_mode.width = 920_f32;
-    c.window_mode.height = 920_f32;
+    c.window_mode.width = 720_f32;
+    c.window_mode.height = 720_f32;
     let (ctx, event_loop) = ContextBuilder::new("OctoChess", "AntonMakesGames")
     .default_conf(c)
     .window_setup(conf::WindowSetup{
