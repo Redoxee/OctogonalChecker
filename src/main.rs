@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use ggez::{*, graphics::MeshBuilder};
 use glam::*;
 
@@ -159,12 +161,14 @@ impl BoundingBox{
 
 struct Grid {
     cells: Vec<Cell>,
-    cell_on_side: u32,
+    width: u32,
+    height: u32,
     position: Vec2,
     scale: f32,
     bounding_box: BoundingBox,
 }
 
+#[derive(Debug)]
 struct CellCoord{
     x:i32,
     y:i32,
@@ -172,17 +176,32 @@ struct CellCoord{
 
 enum IsCell
 {
-    No,
+    None,
     Yes(CellCoord),
+}
+
+impl Debug for IsCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self{
+            IsCell::Yes(cell)=>
+                f.debug_struct("Point")
+                .field("x", &cell.x)
+                .field("y", &cell.y)
+                .finish(),
+                IsCell::None=>f.write_str("[oob]")
+        }
+    }
 }
 
 impl Grid{
     fn new(octogon_on_side: u32, octogon_ratio: f32, position: Vec2, scale: f32, thickness: f32) -> Grid{
-        let cell_on_side = octogon_on_side * 2;
-        let bb_scale = scale * (cell_on_side + 2) as f32;
+        let height = octogon_on_side;
+        let cell_on_side = octogon_on_side * 2 + 1;
+        let bb_scale = scale * (cell_on_side + 1) as f32;
         let mut grid = Grid{
             cells: Vec::new(),
-            cell_on_side,
+            width: cell_on_side,
+            height: octogon_on_side + 1,
             position,
             scale,
             bounding_box: BoundingBox::new(position.x - scale, position.y - scale, bb_scale, bb_scale)
@@ -216,18 +235,28 @@ impl Grid{
         mesh_builder.build(ctx).unwrap()
     }
 
-    fn get_index_from_coord(&self, coord: &CellCoord) -> u32
+    fn get_index_from_coord(&self, coord: &CellCoord) -> Option<usize>
     {
-        match (coord.y.min(self.cell_on_side as i32) * (self.cell_on_side as i32) + coord.x).try_into()
-        {
-            Ok(index) => index,
-            Err(e) => panic!("Coord out of bound! {}", e)
+        let width = self.width as i32;
+        let height = self.height as i32;
+        if coord.x < 0 || coord.y < 0 || coord.x >= width || coord.y >= height {
+            return Option::None
+        }
+
+        if coord.y < height - 1 {
+            return Option::Some((coord.y * width + coord.x) as usize)
+        }
+        else if coord.x % 2 == 0{
+            return Option::Some((coord.y * width + (coord.x) / 2) as usize)
+        }
+        else {
+            return Option::None
         }
     }
 
     fn get_cell_at(&self, position: Vec2) -> IsCell{
         if !self.bounding_box.is_in(&position) {
-            return IsCell::No
+            return IsCell::None
         }
 
         let coord = position - self.position;
@@ -235,18 +264,15 @@ impl Grid{
         let base_y = (coord.y / self.scale / 2_f32).floor() as i32;
         println!("Pressed big square [{},{}]", base_x, base_y);
 
-        let base_x = base_x.clamp(0, self.cell_on_side as i32);
-        let base_y = base_y.clamp(0, self.cell_on_side as i32);
-
         let mut possible_coord = Vec::new();
-        possible_coord.push(CellCoord{x: base_x, y: base_y});
-        possible_coord.push(CellCoord{x: base_x + 1, y: base_y});
-        possible_coord.push(CellCoord{x: base_x + 2, y: base_y});
-        possible_coord.push(CellCoord{x: base_x, y: base_y + 1});
-        possible_coord.push(CellCoord{x: base_x + 2, y: base_y + 1});
+        possible_coord.push(CellCoord{x: base_x * 2, y: base_y});
+        possible_coord.push(CellCoord{x: base_x * 2 + 1, y: base_y});
+        possible_coord.push(CellCoord{x: base_x * 2 + 2, y: base_y});
+        possible_coord.push(CellCoord{x: base_x * 2, y: base_y + 1});
+        possible_coord.push(CellCoord{x: base_x * 2 + 2, y: base_y + 1});
 
         for coord in possible_coord{
-            println!("[{},{}] = {}", coord.x, coord.y, self.get_index_from_coord(&coord));
+            println!("[{},{}] = {}", coord.x, coord.y, match self.get_index_from_coord(&coord) {Some(index) => index.to_string(), None => String::from("Oob")});
         }
 
         let coord = Vec2::new(0_f32 , 0_f32);
@@ -291,7 +317,7 @@ impl Game {
             grid,
             was_pressed: false,
             is_pressed: false,
-            hovered_cell: IsCell::No,
+            hovered_cell: IsCell::None,
         }
     }
 }
@@ -318,7 +344,7 @@ impl ggez::event::EventHandler<GameError> for Game {
         if self.is_pressed
         {
             match &self.hovered_cell{
-                IsCell::No=>{},
+                IsCell::None=>{},
                 IsCell::Yes(coord)=>{
                     let label = format!("[{},{}]", coord.x, coord.y);
                     let label = graphics::Text::new(label);
@@ -336,7 +362,7 @@ fn main(){
 
     let grid_position = Vec2::new(100., 100.);
     let game_instance = Game::new(
-        Grid::new(2, 0.3, grid_position, 40., 5.),
+        Grid::new(3, 0.3, grid_position, 40., 5.),
     );
 
     let mut c = conf::Conf::new();
