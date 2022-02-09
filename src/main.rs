@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::RangeBounds};
 
 use ggez::{*, graphics::MeshBuilder};
 use glam::*;
@@ -77,6 +77,23 @@ impl QuadCell {
     }
 }
 
+
+// from : https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
+fn position_in_poly(vertices : &[Vec2], point : &Vec2) -> bool{
+    let mut inside = false;
+    let mut j = vertices.len() -1;
+    for i in 0..vertices.len() {
+        if  ((vertices[i].y > point.y) != (vertices[j].y > point.y)) &&
+            (point.x < (vertices[j].x-vertices[i].x) * (point.y-vertices[i].y) / (vertices[j].y-vertices[i].y) + vertices[i].x) {
+                inside = !inside;
+            }
+
+            j = i;
+    }
+
+    return inside;
+}
+
 enum Cell {
     Octogone(OctoCell),
     Quad(QuadCell),
@@ -108,32 +125,17 @@ impl Cell {
     }
 
     fn contain_position(&self, position: &Vec2) -> bool{
-        let mut angle = 0_f32;
         match self {
             Cell::Octogone(cell) =>
             {
-                for vertice in cell.verts {
-                    if *position == vertice {
-                        return true
-                    }
-
-                    angle += position.angle_between(vertice);
-                }
+                return position_in_poly(&cell.verts, position) 
             }
 
             Cell::Quad(cell) =>
             {
-                for vertice in cell.verts {
-                    if *position == vertice {
-                        return true
-                    }
-
-                    angle += position.angle_between(vertice);
-                }
+                return position_in_poly(&cell.verts, position)
             }
         }
-
-        return angle != 0_f32;
     }
 }
 
@@ -271,8 +273,17 @@ impl Grid{
         possible_coord.push(CellCoord{x: base_x * 2, y: base_y + 1});
         possible_coord.push(CellCoord{x: base_x * 2 + 2, y: base_y + 1});
 
+        let position = position - self.position;
         for coord in possible_coord{
             println!("[{},{}] = {}", coord.x, coord.y, match self.get_index_from_coord(&coord) {Some(index) => index.to_string(), None => String::from("Oob")});
+            match self.get_index_from_coord(&coord) {
+                Some(index)=> {
+                    if self.cells[index].contain_position(&position) {
+                        println!("[{}] Hit !", index);
+                    }
+                },
+                None=> {},
+            }
         }
 
         let coord = Vec2::new(0_f32 , 0_f32);
