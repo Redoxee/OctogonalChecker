@@ -243,7 +243,15 @@ impl Grid{
     }
 
     fn get_coord_from_index(&self, index : usize) -> CellCoord {
-        CellCoord{x: (index as u32 % self.width) as i32, y: (index as u32 / self.width) as i32}
+        let index = index as i32;
+        let width = self.width as i32;
+        let height = self.height as i32;
+        let mut result = CellCoord{x: index % width, y: index / width}; 
+        if result.y == height - 1 {
+            result.x = result.x * 2;
+        }
+
+        return result;
     }
 
     fn get_cell_at(&self, position: Vec2) -> Option<usize>{
@@ -297,6 +305,14 @@ impl Game {
             prev_mouse_position: Vec2::new(-1_f32, -1_f32),
         }
     }
+
+    fn draw_cell_indexes(&self, ctx: &mut Context) {
+        for index in 0..self.grid.cells.len(){
+            let label = graphics::Text::new(index.to_string());
+            let hf = Vec2::new(label.width(&ctx)/ 2_f32, label.height(&ctx) / 2_f32);
+            graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + self.grid.cells[index].position() - hf)).unwrap();
+        }
+    }
 }
 
 impl ggez::event::EventHandler<GameError> for Game {
@@ -317,7 +333,7 @@ impl ggez::event::EventHandler<GameError> for Game {
                 None => println!("Oob"),
                 Some(cell) => {
                     let coord = self.grid.get_coord_from_index(*cell);
-                    println!("[{},{}]", coord.x, coord.y);
+                    println!("[{},{}] = {}", coord.x, coord.y, cell);
                 }
             }
         }
@@ -350,24 +366,14 @@ impl ggez::event::EventHandler<GameError> for Game {
 
         let mesh = mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(self.grid.position))?; 
-/*
-for index in 0..self.grid.cells.len(){
-    let label = graphics::Text::new(index.to_string());
-    let hf = Vec2::new(label.width(&ctx)/ 2_f32, label.height(&ctx) / 2_f32);
-    graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + self.grid.cells[index].position() - hf))?;
-}
-*/
 
-        if self.is_pressed
-        {
-            match &self.hovered_cell{
-                None=>{},
-                Some(index)=>{
-                    let coord = self.grid.get_coord_from_index(*index);
-                    let label = format!("[{},{}]", coord.x, coord.y);
-                    let label = graphics::Text::new(label);
-                    graphics::draw(ctx, &label, graphics::DrawParam::default())?;
-                }
+        match &self.hovered_cell{
+            None=>{},
+            Some(index)=>{
+                let coord = self.grid.get_coord_from_index(*index);
+                let label = format!("[{},{}]", coord.x, coord.y);
+                let label = graphics::Text::new(label);
+                graphics::draw(ctx, &label, graphics::DrawParam::default())?;
             }
         }
 
@@ -378,14 +384,14 @@ for index in 0..self.grid.cells.len(){
 
 fn main(){
 
-    let grid_position = Vec2::new(120., 120.);
+    let grid_position = Vec2::new(80., 80.);
     let game_instance = Game::new(
-        Grid::new(6, 0.3, grid_position, 40., 5.),
+        Grid::new(4, 0.3, grid_position, 40., 5.),
     );
 
     let mut c = conf::Conf::new();
-    c.window_mode.width = 720_f32;
-    c.window_mode.height = 720_f32;
+    c.window_mode.width = 500_f32;
+    c.window_mode.height = 500_f32;
     let (ctx, event_loop) = ContextBuilder::new("OctoChess", "AntonMakesGames")
     .default_conf(c)
     .window_setup(conf::WindowSetup{
