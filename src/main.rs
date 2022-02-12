@@ -287,12 +287,49 @@ impl Grid{
     }
 }
 
+enum GameSide {
+    Up,
+    Down,
+}
+
+struct Pawn {
+    position : Option<CellCoord>,
+    player : PlayerSide,
+}
+
+enum PlayerSide {
+    Bottom,
+    Up,
+}
+
+impl Pawn {
+    fn draw(&self, mesh_builder: &mut MeshBuilder, grid: &Grid){
+        match &self.position {
+            Some(coord) => {
+                let index = grid.get_index_from_coord(coord);
+                match index {
+                    Some(index) => {
+                        let cell = &grid.cells[index];
+                        let position = cell.position();
+                        let scale = grid.scale * 0.5;
+                        mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, graphics::Color::YELLOW).unwrap();
+                    },
+                    
+                    None => {}
+                }
+            },
+            None => {},
+        }
+    }
+}
+
 struct Game {
     grid: Grid,
     prev_mouse_position: Vec2,
     was_pressed: bool,
     is_pressed: bool,
     hovered_cell: Option<usize>,
+    pawns : [Pawn; 1],
 }
 
 impl Game {
@@ -303,6 +340,12 @@ impl Game {
             is_pressed: false,
             hovered_cell: None,
             prev_mouse_position: Vec2::new(-1_f32, -1_f32),
+            pawns: [
+                Pawn{
+                    position: Some(CellCoord{x: 2, y: 0}),
+                    player: PlayerSide::Bottom,
+                },
+            ],
         }
     }
 
@@ -362,6 +405,10 @@ impl ggez::event::EventHandler<GameError> for Game {
             }
 
             cell.build_mesh(style ,mesh_builder);
+        }
+
+        for pawn in &self.pawns {
+            pawn.draw(mesh_builder, &self.grid);
         }
 
         let mesh = mesh_builder.build(ctx).unwrap();
