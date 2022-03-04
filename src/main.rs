@@ -193,6 +193,13 @@ struct CellCoord{
     y:i32,
 }
 
+impl PartialEq<CellCoord> for CellCoord {
+    fn eq(&self, rhs: &CellCoord) -> bool
+    {
+        return self.x == rhs.x && self.y == rhs.y
+    }
+}
+
 impl Grid{
     fn new(octogon_on_side: u32, octogon_ratio: f32, position: Vec2, scale: f32, thickness: f32) -> Grid{
         let cell_on_side = octogon_on_side * 2 + 1;
@@ -292,9 +299,15 @@ enum GameSide {
     Down,
 }
 
+enum PawnState {
+    None,
+    Selected,
+}
+
 struct Pawn {
     position : Option<CellCoord>,
     player : PlayerSide,
+    State : PawnState,
 }
 
 enum PlayerSide {
@@ -303,16 +316,30 @@ enum PlayerSide {
 }
 
 impl Pawn {
-    fn draw(&self, mesh_builder: &mut MeshBuilder, grid: &Grid){
+    fn draw(&self, mesh_builder: &mut MeshBuilder, game: &Game){
+        let primary_color;
+        let secondary_color;
+        match self.player {
+            PlayerSide::Bottom => {
+                primary_color = graphics::Color::WHITE;
+                secondary_color = graphics::Color::BLACK;
+            }
+            PlayerSide::Up => {
+                primary_color = graphics::Color::BLACK;
+                secondary_color = graphics::Color::WHITE;
+            }
+        }
+
         match &self.position {
             Some(coord) => {
-                let index = grid.get_index_from_coord(coord);
+                let index = game.grid.get_index_from_coord(coord);
                 match index {
                     Some(index) => {
-                        let cell = &grid.cells[index];
+                        let cell = &game.grid.cells[index];
                         let position = cell.position();
-                        let scale = grid.scale * 0.5;
-                        mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, graphics::Color::YELLOW).unwrap();
+                        let scale = game.grid.scale * 0.4;
+                        mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, primary_color).unwrap();
+                        mesh_builder.circle(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(3.)), position, scale, 0.1, secondary_color).unwrap();
                     },
                     
                     None => {}
@@ -329,24 +356,32 @@ struct Game {
     was_pressed: bool,
     is_pressed: bool,
     hovered_cell: Option<usize>,
-    pawns : [Pawn; 1],
+    pawns : Vec<Option<Pawn>>,
+    selected_pawn : Option<usize>,
 }
 
 impl Game {
     fn new(grid : Grid) -> Game{
-        Game{
+        let width = grid.width;
+        let height = grid.height;
+
+        let mut game = Game{
             grid,
             was_pressed: false,
             is_pressed: false,
             hovered_cell: None,
             prev_mouse_position: Vec2::new(-1_f32, -1_f32),
-            pawns: [
-                Pawn{
-                    position: Some(CellCoord{x: 2, y: 0}),
-                    player: PlayerSide::Bottom,
-                },
-            ],
+            pawns: Vec::new(),
+            selected_pawn: None,
+        };
+
+        for _ in 0..width {
+            for _ in 0..height {
+                game.pawns.push(None);
+            }
         }
+
+        return game;
     }
 
     fn draw_cell_indexes(&self, ctx: &mut Context) {
@@ -368,15 +403,35 @@ impl ggez::event::EventHandler<GameError> for Game {
             self.hovered_cell = self.grid.get_cell_at(mouse_position);
         }
 
+        match &self.pawns[0].as_mut() {
+            None => {}
+            Some(pawn) => 
+            {
+                pawn.State = PawnState::Selected;
+            }
+        }
+
         self.prev_mouse_position = mouse_position;
         self.was_pressed = self.is_pressed;
         self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
         if !self.was_pressed && self.is_pressed {
             match &self.hovered_cell {
-                None => println!("Oob"),
+                None => {
+                    self.selected_pawn = None;
+                },
+
                 Some(cell) => {
+                    match &self.pawns[*cell] {
+                        Some(pawn) => {
+                            pawn.State = PawnState::Selected;
+                        },
+
+                        None => {}
+                    }
+
                     let coord = self.grid.get_coord_from_index(*cell);
                     println!("[{},{}] = {}", coord.x, coord.y, cell);
+                    
                 }
             }
         }
@@ -407,8 +462,10 @@ impl ggez::event::EventHandler<GameError> for Game {
             cell.build_mesh(style ,mesh_builder);
         }
 
-        for pawn in &self.pawns {
-            pawn.draw(mesh_builder, &self.grid);
+        for possiblePawn in &self.pawns {
+            if let Some(pawn) = possiblePawn {
+                pawn.draw(mesh_builder, &self);
+            }
         }
 
         let mesh = mesh_builder.build(ctx).unwrap();
