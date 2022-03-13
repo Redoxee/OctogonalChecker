@@ -350,7 +350,6 @@ enum PawnState {
 
 #[derive(Clone, Copy)]
 struct Pawn {
-    position : Option<TileCoord>,
     player : PlayerSide,
     state : PawnState,
 }
@@ -362,7 +361,7 @@ enum PlayerSide {
 }
 
 impl Pawn {
-    fn draw(&self, mesh_builder: &mut MeshBuilder, game: &Game){
+    fn draw(&self, mesh_builder: &mut MeshBuilder, game: &Game, index_on_board: usize){
         let primary_color;
         let mut secondary_color;
         match self.player {
@@ -381,23 +380,11 @@ impl Pawn {
             secondary_color = graphics::Color::YELLOW;
         }
 
-        match &self.position {
-            Some(coord) => {
-                let index = game.grid.get_index_from_coord(*coord);
-                match index {
-                    Some(index) => {
-                        let tile = &game.grid.tiles[index];
-                        let position = tile.position();
-                        let scale = game.grid.scale * 0.4;
-                        mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, primary_color).unwrap();
-                        mesh_builder.circle(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(3.)), position, scale, 0.1, secondary_color).unwrap();
-                    },
-                    
-                    None => {}
-                }
-            },
-            None => {},
-        }
+        let tile = &game.grid.tiles[index_on_board];
+        let position = tile.position();
+        let scale = game.grid.scale * 0.4;
+        mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, primary_color).unwrap();
+        mesh_builder.circle(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(3.)), position, scale, 0.1, secondary_color).unwrap();
     }
 }
 
@@ -428,7 +415,6 @@ impl Game {
         game.pawns[pawn_index] = Some(Pawn{
             state: PawnState::None,
             player: PlayerSide::Bottom,
-            position: Some(pawn_coord),
         });
 
         println!("PawnIndex {}", pawn_index);
@@ -487,13 +473,6 @@ impl ggez::event::EventHandler<GameError> for Game {
                     if self.hovered_tile != self.selected_pawn {
                         self.pawns.swap(self.selected_pawn as usize, self.hovered_tile as usize);
                         self.selected_pawn = self.hovered_tile;
-                        match &mut self.pawns[self.selected_pawn as usize] {
-                            Some(pawn) => {
-                                pawn.position = Some(self.grid.get_coord_from_index(self.selected_pawn as usize));
-                            }
-
-                            None => {panic!()}
-                        }
                     }
                     
                     self.unselect_pawn();
@@ -530,9 +509,9 @@ impl ggez::event::EventHandler<GameError> for Game {
             tile.build_mesh(style ,mesh_builder);
         }
 
-        for possible_pawn in &self.pawns {
-            if let Some(pawn) = possible_pawn {
-                pawn.draw(mesh_builder, &self);
+        for index in 0..self.pawns.len() {
+            if let Some(pawn) = self.pawns[index] {
+                pawn.draw(mesh_builder, &self, index);
             }
         }
 
