@@ -1,19 +1,36 @@
 use ggez::{*, graphics::MeshBuilder};
 use glam::*;
 
-struct OctoCell {
+const GRID_SIDE: usize = 4;
+const NUMBER_OF_TILES: usize = (GRID_SIDE * 2 + 1)  * GRID_SIDE + GRID_SIDE + 1;
+
+#[derive(Clone, Copy)]
+struct OctoTile {
     verts : [Vec2; 8],
     inner_verts : [Vec2; 8],
     position : Vec2,
 }
 
-impl OctoCell {
-    fn new(position: Vec2, octogon_ratio: f32, size: f32, thickness: f32) -> OctoCell {
+#[derive(Clone, Copy)]
+struct QuadTile {
+    verts : [Vec2; 4],
+    inner_verts : [Vec2; 4],
+    position : Vec2,
+}
+
+trait Tile {
+    fn build_mesh(&self, style: TileStyle,mesh_builder: &mut MeshBuilder);
+    fn contain_position(&self, position: &Vec2) -> bool;
+    fn position(&self) -> Vec2;
+}
+
+impl OctoTile {
+    fn new(position: Vec2, octogon_ratio: f32, size: f32, thickness: f32) -> OctoTile {
         let half = octogon_ratio * size;
 
         let inner_size = size - thickness / 2.;
         let inner_half = octogon_ratio * (size - thickness/2.);
-        let cell = OctoCell{
+        let tile = OctoTile{
                 verts:[
                     Vec2::new(size, half) + position,
                     Vec2::new(half, size) + position,
@@ -39,21 +56,15 @@ impl OctoCell {
                 position,
         };
 
-        cell
+        tile
     }
 }
 
-struct QuadCell {
-    verts : [Vec2; 4],
-    inner_verts : [Vec2; 4],
-    position : Vec2,
-}
-
-impl QuadCell {
-    fn new(position: Vec2, octogon_ratio: f32, size: f32, thickness: f32) -> QuadCell {
+impl QuadTile {
+    fn new(position: Vec2, octogon_ratio: f32, size: f32, thickness: f32) -> QuadTile {
         let size = size * (1. - octogon_ratio);
         let thickness = thickness / 2.;
-        let cell= QuadCell{
+        let tile= QuadTile{
             verts: [
                 Vec2::new(0., -size) + position,
                 Vec2::new(size, 0.) + position,
@@ -71,28 +82,22 @@ impl QuadCell {
             position,
         };
 
-        cell
+        tile
     }
 }
 
-trait Cell {
-    fn build_mesh(&self, style: CellStyle,mesh_builder: &mut MeshBuilder);
-    fn contain_position(&self, position: &Vec2) -> bool;
-    fn position(&self) -> Vec2;
-}
-
-impl Cell for OctoCell{
-    fn build_mesh(&self, style: CellStyle,mesh_builder: &mut MeshBuilder) {
+impl Tile for OctoTile{
+    fn build_mesh(&self, style: TileStyle,mesh_builder: &mut MeshBuilder) {
         let color = match style {
-            CellStyle::Base => graphics::Color::new(0.6, 0.6, 0.6, 1_f32),
-            CellStyle::Hovered => graphics::Color::new(0.8, 0.8, 0.8, 1_f32),
-            CellStyle::Press => graphics::Color::new(0.9, 0.9, 0.9, 1_f32),
+            TileStyle::Base => graphics::Color::new(0.6, 0.6, 0.6, 1_f32),
+            TileStyle::Hovered => graphics::Color::new(0.8, 0.8, 0.8, 1_f32),
+            TileStyle::Press => graphics::Color::new(0.9, 0.9, 0.9, 1_f32),
         };
         
         mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &self.inner_verts.to_vec(), color).unwrap();
 
         match style {
-            CellStyle::Press => {
+            TileStyle::Press => {
                 mesh_builder.polygon(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(2.)), &self.verts.to_vec(), graphics::Color::YELLOW).unwrap();
             },
             _=> {},
@@ -108,18 +113,17 @@ impl Cell for OctoCell{
     }
 }
 
-
-impl Cell for QuadCell{
-    fn build_mesh(&self, style: CellStyle,mesh_builder: &mut MeshBuilder) {
+impl Tile for QuadTile{
+    fn build_mesh(&self, style: TileStyle,mesh_builder: &mut MeshBuilder) {
         let color = match style {
-            CellStyle::Base => graphics::Color::new(0.7, 0., 0., 1_f32),
-            CellStyle::Hovered => graphics::Color::new(0.8, 0.3, 0.3, 1_f32),
-            CellStyle::Press => graphics::Color::new(0.9, 0.5, 0.5, 1_f32),
+            TileStyle::Base => graphics::Color::new(0.7, 0., 0., 1_f32),
+            TileStyle::Hovered => graphics::Color::new(0.8, 0.3, 0.3, 1_f32),
+            TileStyle::Press => graphics::Color::new(0.9, 0.5, 0.5, 1_f32),
         };
         
         mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &self.inner_verts.to_vec(), color).unwrap();
         match style {
-            CellStyle::Press => {
+            TileStyle::Press => {
                 mesh_builder.polygon(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(2.)), &self.verts.to_vec(), graphics::Color::YELLOW).unwrap();
             },
             _=> {},
@@ -132,6 +136,39 @@ impl Cell for QuadCell{
 
     fn position(&self) -> Vec2 {
         self.position
+    }
+}
+
+#[derive(Clone, Copy)]
+enum GridTile {
+    Quad(QuadTile),
+    Octo(OctoTile),
+    None,
+}
+
+impl Tile for GridTile {
+    fn build_mesh(&self, style: TileStyle,mesh_builder: &mut MeshBuilder) {
+        match self {
+            GridTile::Quad(inner_tile) => inner_tile.build_mesh(style, mesh_builder),
+            GridTile::Octo(inner_tile) => inner_tile.build_mesh(style, mesh_builder),
+            GridTile::None => panic!()
+        }
+    }
+
+    fn contain_position(&self, position: &Vec2) -> bool {
+        match self {
+            GridTile::Quad(inner_tile) => inner_tile.contain_position(position),
+            GridTile::Octo(inner_tile) => inner_tile.contain_position(position),
+            GridTile::None => panic!()
+        }
+    }
+
+    fn position(&self) -> Vec2 {
+        match self {
+            GridTile::Quad(inner_tile) => inner_tile.position(),
+            GridTile::Octo(inner_tile) => inner_tile.position(),
+            GridTile::None => panic!()
+        }
     }
 }
 
@@ -151,7 +188,7 @@ fn position_in_poly(vertices : &[Vec2], point : &Vec2) -> bool{
     return inside;
 }
 
-enum CellStyle {
+enum TileStyle {
     Base,
     Hovered,
     Press,
@@ -180,80 +217,90 @@ impl BoundingBox{
 }
 
 struct Grid {
-    cells: Vec<Box<dyn Cell>>,
-    width: u32,
-    height: u32,
+    tiles: [GridTile; NUMBER_OF_TILES],
+    width: usize,
+    height: usize,
     position: Vec2,
     scale: f32,
     bounding_box: BoundingBox,
 }
 
-struct CellCoord{
+#[derive(Clone, Copy)]
+#[derive(PartialEq, Eq)]
+struct TileCoord{
     x:i32,
     y:i32,
 }
 
-impl PartialEq<CellCoord> for CellCoord {
-    fn eq(&self, rhs: &CellCoord) -> bool
-    {
-        return self.x == rhs.x && self.y == rhs.y
-    }
-}
-
 impl Grid{
-    fn new(octogon_on_side: u32, octogon_ratio: f32, position: Vec2, scale: f32, thickness: f32) -> Grid{
-        let cell_on_side = octogon_on_side * 2 + 1;
-        let bb_scale = scale * (cell_on_side + 1) as f32;
+    fn new(octogon_ratio: f32, position: Vec2, scale: f32, thickness: f32) -> Grid{
+        let tile_on_side = GRID_SIDE * 2 + 1;
+        let bb_scale = scale * (tile_on_side + 1) as f32;
         let mut grid = Grid{
-            cells: Vec::new(),
-            width: cell_on_side,
-            height: octogon_on_side + 1,
+            tiles: [GridTile::None; NUMBER_OF_TILES],
+            width: tile_on_side,
+            height: GRID_SIDE + 1,
             position,
             scale,
             bounding_box: BoundingBox::new(position.x - scale, position.y - scale, bb_scale, bb_scale)
         };
 
-        let half_cell_gap = scale;
-        let cell_gap = half_cell_gap * 2.;
-        let octo_delta = Vec2::new(half_cell_gap, half_cell_gap);
+        let half_tile_gap = scale;
+        let tile_gap = half_tile_gap * 2.;
+        let octo_delta = Vec2::new(half_tile_gap, half_tile_gap);
 
-        for y_index in 0..=octogon_on_side {
-            for x_index in 0..=octogon_on_side {
-                let position = Vec2::new((x_index) as f32, (y_index) as f32) * cell_gap;
-                grid.cells.push(Box::new(QuadCell::new(position, octogon_ratio, scale, thickness)));
+        let mut array_index = 0;
+        for y_index in 0..=GRID_SIDE {
+            for x_index in 0..=GRID_SIDE {
+                let position = Vec2::new((x_index) as f32, (y_index) as f32) * tile_gap;
+                grid.tiles[array_index] = GridTile::Quad(QuadTile::new(position, octogon_ratio, scale, thickness));
+                array_index += 1;
 
-                if x_index < octogon_on_side && y_index < octogon_on_side{
-                    grid.cells.push(Box::new(OctoCell::new(position + octo_delta, octogon_ratio, scale, thickness)));
+                if x_index < GRID_SIDE && y_index < GRID_SIDE{
+                    grid.tiles[array_index] = GridTile::Octo(OctoTile::new(position + octo_delta, octogon_ratio, scale, thickness));
+                    array_index += 1;
                 }
             }
         }
 
+        println!("array {} last_index {}" , grid.tiles.len(), array_index);
+
         grid
     }
 
-    fn get_index_from_coord(&self, coord: &CellCoord) -> Option<usize> {
+    fn get_index_from_coord(&self, coord: TileCoord) -> Option<usize> {
         let width = self.width as i32;
         let height = self.height as i32;
         if coord.x < 0 || coord.y < 0 || coord.x >= width || coord.y >= height {
             return Option::None
         }
 
-        if coord.y < height - 1 {
-            return Option::Some((coord.y * width + coord.x) as usize)
-        }
-        else if coord.x % 2 == 0{
-            return Option::Some((coord.y * width + (coord.x) / 2) as usize)
+        if coord.y < height - 1 || coord.x % 2 == 0{
+            return Some(self.get_index_from_coord_unsafe(&coord))
         }
         else {
             return Option::None
         }
     }
 
-    fn get_coord_from_index(&self, index : usize) -> CellCoord {
+    fn get_index_from_coord_unsafe(&self, coord: &TileCoord) -> usize {
+        let width = self.width as i32;
+        let height = self.height as i32;
+        
+        if coord.y < height - 1 {
+            return (coord.y * width + coord.x) as usize
+        }
+        else
+        {
+            return (coord.y * width + (coord.x) / 2) as usize
+        }
+    }
+
+    fn get_coord_from_index(&self, index : usize) -> TileCoord {
         let index = index as i32;
         let width = self.width as i32;
         let height = self.height as i32;
-        let mut result = CellCoord{x: index % width, y: index / width}; 
+        let mut result = TileCoord{x: index % width, y: index / width}; 
         if result.y == height - 1 {
             result.x = result.x * 2;
         }
@@ -261,9 +308,9 @@ impl Grid{
         return result;
     }
 
-    fn get_cell_at(&self, position: Vec2) -> Option<usize>{
+    fn get_tile_at(&self, position: Vec2) -> isize{
         if !self.bounding_box.is_in(&position) {
-            return None
+            return -1
         }
 
         let coord = position - self.position;
@@ -271,18 +318,18 @@ impl Grid{
         let base_y = (coord.y / self.scale / 2_f32).floor() as i32;
 
         let mut possible_coord = Vec::new();
-        possible_coord.push(CellCoord{x: base_x * 2, y: base_y});
-        possible_coord.push(CellCoord{x: base_x * 2 + 1, y: base_y});
-        possible_coord.push(CellCoord{x: base_x * 2 + 2, y: base_y});
-        possible_coord.push(CellCoord{x: base_x * 2, y: base_y + 1});
-        possible_coord.push(CellCoord{x: base_x * 2 + 2, y: base_y + 1});
+        possible_coord.push(TileCoord{x: base_x * 2, y: base_y});
+        possible_coord.push(TileCoord{x: base_x * 2 + 1, y: base_y});
+        possible_coord.push(TileCoord{x: base_x * 2 + 2, y: base_y});
+        possible_coord.push(TileCoord{x: base_x * 2, y: base_y + 1});
+        possible_coord.push(TileCoord{x: base_x * 2 + 2, y: base_y + 1});
 
         let position = position - self.position;
-        for coord in possible_coord{
-            match self.get_index_from_coord(&coord) {
+        for coord in possible_coord {
+            match self.get_index_from_coord(coord) {
                 Some(index)=> {
-                    if self.cells[index].contain_position(&position) {
-                        return Option::Some(index)
+                    if self.tiles[index].contain_position(&position) {
+                        return index as isize
                     }
                 },
 
@@ -290,53 +337,57 @@ impl Grid{
             }
         }
         
-        return Option::None
+        return -1
     }
 }
 
-enum GameSide {
-    Up,
-    Down,
-}
-
+#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum PawnState {
     None,
     Selected,
 }
 
+#[derive(Clone, Copy)]
 struct Pawn {
-    position : Option<CellCoord>,
+    position : Option<TileCoord>,
     player : PlayerSide,
-    State : PawnState,
+    state : PawnState,
 }
 
+#[derive(Clone, Copy)]
 enum PlayerSide {
     Bottom,
-    Up,
+    Top,
 }
 
 impl Pawn {
     fn draw(&self, mesh_builder: &mut MeshBuilder, game: &Game){
         let primary_color;
-        let secondary_color;
+        let mut secondary_color;
         match self.player {
             PlayerSide::Bottom => {
                 primary_color = graphics::Color::WHITE;
-                secondary_color = graphics::Color::BLACK;
+                secondary_color = graphics::Color::BLUE;
             }
-            PlayerSide::Up => {
-                primary_color = graphics::Color::BLACK;
+
+            PlayerSide::Top => {
+                primary_color = graphics::Color::BLUE;
                 secondary_color = graphics::Color::WHITE;
             }
         }
 
+        if self.state == PawnState::Selected {
+            secondary_color = graphics::Color::YELLOW;
+        }
+
         match &self.position {
             Some(coord) => {
-                let index = game.grid.get_index_from_coord(coord);
+                let index = game.grid.get_index_from_coord(*coord);
                 match index {
                     Some(index) => {
-                        let cell = &game.grid.cells[index];
-                        let position = cell.position();
+                        let tile = &game.grid.tiles[index];
+                        let position = tile.position();
                         let scale = game.grid.scale * 0.4;
                         mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, primary_color).unwrap();
                         mesh_builder.circle(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(3.)), position, scale, 0.1, secondary_color).unwrap();
@@ -355,40 +406,53 @@ struct Game {
     prev_mouse_position: Vec2,
     was_pressed: bool,
     is_pressed: bool,
-    hovered_cell: Option<usize>,
-    pawns : Vec<Option<Pawn>>,
-    selected_pawn : Option<usize>,
+    hovered_tile: isize,
+    pawns : [Option<Pawn>; NUMBER_OF_TILES],
+    selected_pawn : isize,
 }
 
 impl Game {
     fn new(grid : Grid) -> Game{
-        let width = grid.width;
-        let height = grid.height;
-
         let mut game = Game{
             grid,
             was_pressed: false,
             is_pressed: false,
-            hovered_cell: None,
+            hovered_tile: -1,
             prev_mouse_position: Vec2::new(-1_f32, -1_f32),
-            pawns: Vec::new(),
-            selected_pawn: None,
+            pawns: [Option::None; NUMBER_OF_TILES],
+            selected_pawn: -1,
         };
 
-        for _ in 0..width {
-            for _ in 0..height {
-                game.pawns.push(None);
-            }
-        }
+        let pawn_coord = TileCoord{x: 1, y: 1};
+        let pawn_index = game.grid.get_index_from_coord_unsafe(&pawn_coord);
+        game.pawns[pawn_index] = Some(Pawn{
+            state: PawnState::None,
+            player: PlayerSide::Bottom,
+            position: Some(pawn_coord),
+        });
+
+        println!("PawnIndex {}", pawn_index);
 
         return game;
     }
 
-    fn draw_cell_indexes(&self, ctx: &mut Context) {
-        for index in 0..self.grid.cells.len(){
+    #[allow(dead_code)]
+    fn draw_tile_indexes(&self, ctx: &mut Context) {
+        for index in 0..self.grid.tiles.len(){
             let label = graphics::Text::new(index.to_string());
             let hf = Vec2::new(label.width(&ctx)/ 2_f32, label.height(&ctx) / 2_f32);
-            graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + self.grid.cells[index].position() - hf)).unwrap();
+            graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + self.grid.tiles[index].position() - hf)).unwrap();
+        }
+    }
+
+    fn unselect_pawn(&mut self) {
+        match &mut self.pawns[self.selected_pawn as usize] {
+            Some(pawn) => {
+                pawn.state = PawnState::None;
+                self.selected_pawn = -1;
+            },
+
+            None => { panic!() }
         }
     }
 }
@@ -400,38 +464,45 @@ impl ggez::event::EventHandler<GameError> for Game {
 
         if mouse_position != self.prev_mouse_position
         {
-            self.hovered_cell = self.grid.get_cell_at(mouse_position);
-        }
-
-        match &self.pawns[0].as_mut() {
-            None => {}
-            Some(pawn) => 
-            {
-                pawn.State = PawnState::Selected;
-            }
+            self.hovered_tile = self.grid.get_tile_at(mouse_position);
         }
 
         self.prev_mouse_position = mouse_position;
         self.was_pressed = self.is_pressed;
         self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
         if !self.was_pressed && self.is_pressed {
-            match &self.hovered_cell {
-                None => {
-                    self.selected_pawn = None;
-                },
-
-                Some(cell) => {
-                    match &self.pawns[*cell] {
+            if self.hovered_tile > -1 {
+                if self.selected_pawn < 0 {
+                    match &mut self.pawns[self.hovered_tile as usize] {
                         Some(pawn) => {
-                            pawn.State = PawnState::Selected;
-                        },
+                            pawn.state = PawnState::Selected;
+                            self.selected_pawn = self.hovered_tile;
+                        }
 
-                        None => {}
+                        None => {},
                     }
+                }
+                else 
+                {
+                    if self.hovered_tile != self.selected_pawn {
+                        self.pawns.swap(self.selected_pawn as usize, self.hovered_tile as usize);
+                        self.selected_pawn = self.hovered_tile;
+                        match &mut self.pawns[self.selected_pawn as usize] {
+                            Some(pawn) => {
+                                pawn.position = Some(self.grid.get_coord_from_index(self.selected_pawn as usize));
+                            }
 
-                    let coord = self.grid.get_coord_from_index(*cell);
-                    println!("[{},{}] = {}", coord.x, coord.y, cell);
+                            None => {panic!()}
+                        }
+                    }
                     
+                    self.unselect_pawn();
+                }
+
+            }
+            else {
+                if self.selected_pawn > -1 {
+                    self.unselect_pawn();
                 }
             }
         }
@@ -443,27 +514,24 @@ impl ggez::event::EventHandler<GameError> for Game {
         graphics::clear(ctx, graphics::Color::BLACK);
 
         let mesh_builder = &mut graphics::MeshBuilder::new();
-        for index in 0..self.grid.cells.len()
+        for index in 0..self.grid.tiles.len()
         {
-            let cell = &self.grid.cells[index];
-            let mut style = CellStyle::Base;
-            match self.hovered_cell {
-                Some(hovered_index) => if hovered_index == index {
-                    if self.is_pressed {
-                        style = CellStyle::Press
-                    }
-                    else {
-                        style = CellStyle::Hovered
-                    }
-                },
-                None => {},
+            let tile = &self.grid.tiles[index];
+            let mut style = TileStyle::Base;
+            if self.hovered_tile == index as isize {
+                if self.is_pressed {
+                    style = TileStyle::Press
+                }
+                else {
+                    style = TileStyle::Hovered
+                }
             }
 
-            cell.build_mesh(style ,mesh_builder);
+            tile.build_mesh(style ,mesh_builder);
         }
 
-        for possiblePawn in &self.pawns {
-            if let Some(pawn) = possiblePawn {
+        for possible_pawn in &self.pawns {
+            if let Some(pawn) = possible_pawn {
                 pawn.draw(mesh_builder, &self);
             }
         }
@@ -471,14 +539,11 @@ impl ggez::event::EventHandler<GameError> for Game {
         let mesh = mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(self.grid.position))?; 
 
-        match &self.hovered_cell{
-            None=>{},
-            Some(index)=>{
-                let coord = self.grid.get_coord_from_index(*index);
-                let label = format!("[{},{}]", coord.x, coord.y);
-                let label = graphics::Text::new(label);
-                graphics::draw(ctx, &label, graphics::DrawParam::default())?;
-            }
+        if self.hovered_tile > -1 {
+            let coord = self.grid.get_coord_from_index(self.hovered_tile as usize);
+            let label = format!("[{},{}] = {}", coord.x, coord.y, self.hovered_tile);
+            let label = graphics::Text::new(label);
+            graphics::draw(ctx, &label, graphics::DrawParam::default())?;
         }
 
         graphics::present(ctx)?;
@@ -490,7 +555,7 @@ fn main(){
 
     let grid_position = Vec2::new(80., 80.);
     let game_instance = Game::new(
-        Grid::new(4, 0.3, grid_position, 40., 5.),
+        Grid::new(0.3, grid_position, 40., 5.),
     );
 
     let mut c = conf::Conf::new();
