@@ -1,5 +1,6 @@
 use ggez::{*, graphics::MeshBuilder};
 use glam::*;
+use::std::ops;
 
 const GRID_SIDE: usize = 4;
 const NUMBER_OF_TILES: usize = (GRID_SIDE * 2 + 1)  * GRID_SIDE + GRID_SIDE + 1;
@@ -232,6 +233,14 @@ struct TileCoord{
     y:i32,
 }
 
+impl ops::Add<TileCoord> for TileCoord{
+    type Output = TileCoord;
+
+    fn add(self, rhs: TileCoord) -> TileCoord {
+        TileCoord{ x: self.x + rhs.x, y: self.y + rhs.y }
+    }
+}
+
 impl Grid{
     fn new(octogon_ratio: f32, position: Vec2, scale: f32, thickness: f32) -> Grid{
         let tile_on_side = GRID_SIDE * 2 + 1;
@@ -276,14 +285,14 @@ impl Grid{
         }
 
         if coord.y < height - 1 || coord.x % 2 == 0{
-            return Some(self.get_index_from_coord_unsafe(&coord))
+            return Some(self.get_index_from_coord_unsafe(coord))
         }
         else {
             return Option::None
         }
     }
 
-    fn get_index_from_coord_unsafe(&self, coord: &TileCoord) -> usize {
+    fn get_index_from_coord_unsafe(&self, coord: TileCoord) -> usize {
         let width = self.width as i32;
         let height = self.height as i32;
         
@@ -341,6 +350,15 @@ impl Grid{
     }
 }
 
+impl ops::Index<TileCoord> for Grid {
+    type Output = GridTile;
+    
+    fn index(&self, index: TileCoord) -> &GridTile {
+        let index = self.get_index_from_coord_unsafe(index);
+        return &self.tiles[index]
+    }
+}
+
 #[derive(PartialEq, Eq)]
 #[derive(Clone, Copy)]
 enum PawnState {
@@ -361,7 +379,7 @@ enum PlayerSide {
 }
 
 impl Pawn {
-    fn draw(&self, mesh_builder: &mut MeshBuilder, game: &Game, index_on_board: usize){
+    fn draw(&self, mesh_builder: &mut MeshBuilder, position: Vec2, scale: f32){
         let primary_color;
         let mut secondary_color;
         match self.player {
@@ -380,9 +398,6 @@ impl Pawn {
             secondary_color = graphics::Color::YELLOW;
         }
 
-        let tile = &game.grid.tiles[index_on_board];
-        let position = tile.position();
-        let scale = game.grid.scale * 0.4;
         mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, primary_color).unwrap();
         mesh_builder.circle(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(3.)), position, scale, 0.1, secondary_color).unwrap();
     }
@@ -410,14 +425,13 @@ impl Game {
             selected_pawn: -1,
         };
 
-        let pawn_coord = TileCoord{x: 1, y: 1};
-        let pawn_index = game.grid.get_index_from_coord_unsafe(&pawn_coord);
-        game.pawns[pawn_index] = Some(Pawn{
-            state: PawnState::None,
-            player: PlayerSide::Bottom,
-        });
+        game.add_pawn(PlayerSide::Top, TileCoord{x: 3, y: 0});
+        game.add_pawn(PlayerSide::Top, TileCoord{x: 4, y: 0});
+        game.add_pawn(PlayerSide::Top, TileCoord{x: 5, y: 0});
 
-        println!("PawnIndex {}", pawn_index);
+        game.add_pawn(PlayerSide::Bottom, TileCoord{x: 3, y: 3});
+        game.add_pawn(PlayerSide::Bottom, TileCoord{x: 4, y: 4});
+        game.add_pawn(PlayerSide::Bottom, TileCoord{x: 5, y: 3});
 
         return game;
     }
@@ -440,6 +454,20 @@ impl Game {
 
             None => { panic!() }
         }
+    }
+
+    fn add_pawn(&mut self, side: PlayerSide, coord: TileCoord) {
+        self.pawns[self.grid.get_index_from_coord_unsafe(coord)] = Some(Pawn{
+            state: PawnState::None,
+            player: side,
+        });
+    }
+
+    fn pawn_displacement(&self, coord: TileCoord) -> Vec<TileCoord>{
+        let result = Vec::new();
+        
+
+        return result;
     }
 }
 
@@ -511,7 +539,7 @@ impl ggez::event::EventHandler<GameError> for Game {
 
         for index in 0..self.pawns.len() {
             if let Some(pawn) = self.pawns[index] {
-                pawn.draw(mesh_builder, &self, index);
+                pawn.draw(mesh_builder, self.grid.tiles[index].position(), self.grid.scale * 0.4);
             }
         }
 
