@@ -91,6 +91,7 @@ impl Tile for OctoTile{
     fn build_mesh(&self, style: TileStyle,mesh_builder: &mut MeshBuilder) {
         let color = match style {
             TileStyle::Base => graphics::Color::new(0.6, 0.6, 0.6, 1_f32),
+            TileStyle::Highlight => graphics::Color::new(0.3, 0.4, 0.5, 1_f32),
             TileStyle::Hovered => graphics::Color::new(0.8, 0.8, 0.8, 1_f32),
             TileStyle::Press => graphics::Color::new(0.9, 0.9, 0.9, 1_f32),
         };
@@ -98,7 +99,7 @@ impl Tile for OctoTile{
         mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &self.inner_verts.to_vec(), color).unwrap();
 
         match style {
-            TileStyle::Press => {
+            TileStyle::Highlight => {
                 mesh_builder.polygon(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(2.)), &self.verts.to_vec(), graphics::Color::YELLOW).unwrap();
             },
             _=> {},
@@ -118,13 +119,14 @@ impl Tile for QuadTile{
     fn build_mesh(&self, style: TileStyle,mesh_builder: &mut MeshBuilder) {
         let color = match style {
             TileStyle::Base => graphics::Color::new(0.7, 0., 0., 1_f32),
+            TileStyle::Highlight => graphics::Color::new(0.1, 0., 0.3, 1_f32),
             TileStyle::Hovered => graphics::Color::new(0.8, 0.3, 0.3, 1_f32),
             TileStyle::Press => graphics::Color::new(0.9, 0.5, 0.5, 1_f32),
         };
         
         mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &self.inner_verts.to_vec(), color).unwrap();
         match style {
-            TileStyle::Press => {
+            TileStyle::Highlight => {
                 mesh_builder.polygon(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(2.)), &self.verts.to_vec(), graphics::Color::YELLOW).unwrap();
             },
             _=> {},
@@ -192,6 +194,7 @@ fn position_in_poly(vertices : &[Vec2], point : &Vec2) -> bool{
 enum TileStyle {
     Base,
     Hovered,
+    Highlight,
     Press,
 }
 
@@ -411,6 +414,7 @@ struct Game {
     hovered_tile: isize,
     pawns : [Option<Pawn>; NUMBER_OF_TILES],
     selected_pawn : isize,
+    possible_plays: Vec<TileCoord>,
 }
 
 impl Game {
@@ -423,6 +427,7 @@ impl Game {
             prev_mouse_position: Vec2::new(-1_f32, -1_f32),
             pawns: [Option::None; NUMBER_OF_TILES],
             selected_pawn: -1,
+            possible_plays: Vec::new(),
         };
 
         game.add_pawn(PlayerSide::Top, TileCoord{x: 3, y: 0});
@@ -450,6 +455,7 @@ impl Game {
             Some(pawn) => {
                 pawn.state = PawnState::None;
                 self.selected_pawn = -1;
+                self.possible_plays.clear();
             },
 
             None => { panic!() }
@@ -463,11 +469,33 @@ impl Game {
         });
     }
 
-    fn pawn_displacement(&self, coord: TileCoord) -> Vec<TileCoord>{
-        let result = Vec::new();
-        
+    fn get_possible_plays(&self, coord: TileCoord) -> Vec<TileCoord>{
+       match self.grid[coord] {
+            GridTile::Quad(_) => {
+                return Vec::from([
+                    TileCoord{ x: coord.x + 1, y: coord.y },
+                    TileCoord{ x: coord.x - 1, y: coord.y },
+                    TileCoord{ x: coord.x + 1, y: coord.y - 1 },
+                    TileCoord{ x: coord.x - 1, y: coord.y - 1 },
+                ])
+            },
 
-        return result;
+            GridTile::Octo(_) => {
+                return Vec::from([
+                    TileCoord{ x: coord.x + 2, y: coord.y },
+                    TileCoord{ x: coord.x - 2, y: coord.y },
+                    TileCoord{ x: coord.x    , y: coord.y - 1 },
+                    TileCoord{ x: coord.x    , y: coord.y + 1 },
+                    
+                    TileCoord{ x: coord.x + 1, y: coord.y },
+                    TileCoord{ x: coord.x - 1, y: coord.y },
+                    TileCoord{ x: coord.x + 1, y: coord.y + 1 },
+                    TileCoord{ x: coord.x - 1, y: coord.y + 1 },
+                ])
+            },
+
+            GridTile::None => panic!(),
+        }
     }
 }
 
@@ -486,11 +514,14 @@ impl ggez::event::EventHandler<GameError> for Game {
         self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
         if !self.was_pressed && self.is_pressed {
             if self.hovered_tile > -1 {
+                let pressed_tile = self.grid.get_coord_from_index(self.hovered_tile as usize);
+
                 if self.selected_pawn < 0 {
                     match &mut self.pawns[self.hovered_tile as usize] {
                         Some(pawn) => {
                             pawn.state = PawnState::Selected;
                             self.selected_pawn = self.hovered_tile;
+                            self.possible_plays = self.get_possible_plays(pressed_tile);
                         }
 
                         None => {},
@@ -498,7 +529,8 @@ impl ggez::event::EventHandler<GameError> for Game {
                 }
                 else 
                 {
-                    if self.hovered_tile != self.selected_pawn {
+                    if self.hovered_tile != self.selected_pawn && self.possible_plays.contains(&pressed_tile) {
+                        
                         self.pawns.swap(self.selected_pawn as usize, self.hovered_tile as usize);
                         self.selected_pawn = self.hovered_tile;
                     }
@@ -523,6 +555,7 @@ impl ggez::event::EventHandler<GameError> for Game {
         let mesh_builder = &mut graphics::MeshBuilder::new();
         for index in 0..self.grid.tiles.len()
         {
+            let tile_coord = self.grid.get_coord_from_index(index);
             let tile = &self.grid.tiles[index];
             let mut style = TileStyle::Base;
             if self.hovered_tile == index as isize {
@@ -532,6 +565,9 @@ impl ggez::event::EventHandler<GameError> for Game {
                 else {
                     style = TileStyle::Hovered
                 }
+            }
+            else if self.possible_plays.contains(&tile_coord) {
+                style = TileStyle::Highlight;
             }
 
             tile.build_mesh(style ,mesh_builder);
