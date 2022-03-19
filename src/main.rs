@@ -376,6 +376,7 @@ struct Pawn {
 }
 
 #[derive(Clone, Copy)]
+#[derive(PartialEq, Eq)]
 enum PlayerSide {
     Bottom,
     Top,
@@ -414,7 +415,7 @@ struct Game {
     hovered_tile: isize,
     pawns : [Option<Pawn>; NUMBER_OF_TILES],
     selected_pawn : isize,
-    possible_plays: Vec<TileCoord>,
+    possible_plays: Vec<usize>,
 }
 
 impl Game {
@@ -469,33 +470,38 @@ impl Game {
         });
     }
 
-    fn get_possible_plays(&self, coord: TileCoord) -> Vec<TileCoord>{
-       match self.grid[coord] {
+    fn get_possible_plays(&self, index: usize, player_side: PlayerSide) -> Vec<usize>{
+        let coord = self.grid.get_coord_from_index(index);
+        let mut possible_plays = Vec::new();
+        match self.grid[coord] {
             GridTile::Quad(_) => {
-                return Vec::from([
-                    TileCoord{ x: coord.x + 1, y: coord.y },
-                    TileCoord{ x: coord.x - 1, y: coord.y },
-                    TileCoord{ x: coord.x + 1, y: coord.y - 1 },
-                    TileCoord{ x: coord.x - 1, y: coord.y - 1 },
-                ])
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y - 1}) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y - 1}) {possible_plays.push(index)};
             },
 
             GridTile::Octo(_) => {
-                return Vec::from([
-                    TileCoord{ x: coord.x + 2, y: coord.y },
-                    TileCoord{ x: coord.x - 2, y: coord.y },
-                    TileCoord{ x: coord.x    , y: coord.y - 1 },
-                    TileCoord{ x: coord.x    , y: coord.y + 1 },
-                    
-                    TileCoord{ x: coord.x + 1, y: coord.y },
-                    TileCoord{ x: coord.x - 1, y: coord.y },
-                    TileCoord{ x: coord.x + 1, y: coord.y + 1 },
-                    TileCoord{ x: coord.x - 1, y: coord.y + 1 },
-                ])
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x + 2, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x - 2, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x    , y: coord.y + 1}) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x    , y: coord.y - 1}) {possible_plays.push(index)};
+
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y + 1}) {possible_plays.push(index)};
+                if let Some(index) = self.grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y + 1}) {possible_plays.push(index)};
             },
 
             GridTile::None => panic!(),
         }
+
+        possible_plays.retain(|&index| match self.pawns[index] {
+            Some(pawn) => { pawn.player != player_side },
+            None => true
+        });
+
+        return possible_plays;
     }
 }
 
@@ -514,14 +520,13 @@ impl ggez::event::EventHandler<GameError> for Game {
         self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
         if !self.was_pressed && self.is_pressed {
             if self.hovered_tile > -1 {
-                let pressed_tile = self.grid.get_coord_from_index(self.hovered_tile as usize);
-
                 if self.selected_pawn < 0 {
                     match &mut self.pawns[self.hovered_tile as usize] {
                         Some(pawn) => {
                             pawn.state = PawnState::Selected;
                             self.selected_pawn = self.hovered_tile;
-                            self.possible_plays = self.get_possible_plays(pressed_tile);
+                            let player_side = pawn.player;
+                            self.possible_plays = self.get_possible_plays(self.hovered_tile as usize, player_side);
                         }
 
                         None => {},
@@ -529,15 +534,16 @@ impl ggez::event::EventHandler<GameError> for Game {
                 }
                 else 
                 {
-                    if self.hovered_tile != self.selected_pawn && self.possible_plays.contains(&pressed_tile) {
-                        
-                        self.pawns.swap(self.selected_pawn as usize, self.hovered_tile as usize);
-                        self.selected_pawn = self.hovered_tile;
+                    if self.hovered_tile != self.selected_pawn && self.possible_plays.contains(&(self.hovered_tile as usize)) {
+                        let source_index = self.selected_pawn as usize;
+                        self.unselect_pawn();
+                        self.pawns[self.hovered_tile as usize] = self.pawns[source_index];
+                        self.pawns[source_index] = None;
                     }
-                    
-                    self.unselect_pawn();
+                    else {
+                        self.unselect_pawn();
+                    }
                 }
-
             }
             else {
                 if self.selected_pawn > -1 {
@@ -555,7 +561,6 @@ impl ggez::event::EventHandler<GameError> for Game {
         let mesh_builder = &mut graphics::MeshBuilder::new();
         for index in 0..self.grid.tiles.len()
         {
-            let tile_coord = self.grid.get_coord_from_index(index);
             let tile = &self.grid.tiles[index];
             let mut style = TileStyle::Base;
             if self.hovered_tile == index as isize {
@@ -566,7 +571,7 @@ impl ggez::event::EventHandler<GameError> for Game {
                     style = TileStyle::Hovered
                 }
             }
-            else if self.possible_plays.contains(&tile_coord) {
+            else if self.possible_plays.contains(&index) {
                 style = TileStyle::Highlight;
             }
 
