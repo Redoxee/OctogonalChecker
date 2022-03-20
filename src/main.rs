@@ -409,7 +409,7 @@ impl Pawn {
     }
 }
 
-struct Game {
+struct InGameState {
     grid: Grid,
     prev_mouse_position: Vec2,
     was_pressed: bool,
@@ -421,11 +421,13 @@ struct Game {
     current_player : PlayerSide,
     top_player_pawn : Pawn,
     bottom_player_pawn : Pawn,
+    top_pawn_count : i8,
+    bottom_pawn_count : i8,
 }
 
-impl Game {
-    fn new(grid : Grid) -> Game{
-        let mut game = Game{
+impl InGameState {
+    fn new(grid : Grid) -> InGameState{
+        let mut game = InGameState{
             grid,
             was_pressed: false,
             is_pressed: false,
@@ -437,6 +439,8 @@ impl Game {
             top_player_pawn: Pawn {player: PlayerSide::Top, state: PawnState::None},
             bottom_player_pawn: Pawn{player: PlayerSide::Bottom, state: PawnState::None},
             current_player: PlayerSide::Bottom,
+            top_pawn_count: 3,
+            bottom_pawn_count: 3,
         };
 
         game.add_pawn(PlayerSide::Top, TileCoord{x: 3, y: 0});
@@ -513,7 +517,7 @@ impl Game {
     }
 }
 
-impl ggez::event::EventHandler<GameError> for Game {
+impl ggez::event::EventHandler<GameError> for InGameState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse_position = input::mouse::position(ctx);
         let mouse_position = Vec2::new(mouse_position.x, mouse_position.y);
@@ -547,6 +551,17 @@ impl ggez::event::EventHandler<GameError> for Game {
                     if self.hovered_tile != self.selected_pawn && self.possible_plays.contains(&(self.hovered_tile as usize)) {
                         let source_index = self.selected_pawn as usize;
                         self.unselect_pawn();
+                        
+                        match self.pawns[self.hovered_tile as usize] {
+                            Some(pawn) => {
+                                match pawn.player {
+                                    PlayerSide::Top => { self.top_pawn_count = self.top_pawn_count - 1;},
+                                    PlayerSide::Bottom => { self.bottom_pawn_count = self.bottom_pawn_count - 1;},
+                                }
+                            },
+                            None => {},
+                        }
+
                         self.pawns[self.hovered_tile as usize] = self.pawns[source_index];
                         self.pawns[source_index] = None;
 
@@ -626,12 +641,88 @@ impl ggez::event::EventHandler<GameError> for Game {
     }
 }
 
+struct GameOverState {
+    winner_pawn : Pawn,
+}
+
+impl ggez::event::EventHandler<GameError> for GameOverState {
+    fn update(&mut self, _ctx: &mut Context) -> Result<(), GameError> {
+        Ok(())
+    }
+
+    fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+        graphics::clear(ctx, graphics::Color::BLACK);
+        let winning_label = graphics::Text::new("Winner :");
+        graphics::draw(ctx, &winning_label, graphics::DrawParam::default().dest(Vec2::new(250. - winning_label.width(ctx), 250. - winning_label.height(ctx) / 2.)))?;
+        let mesh_builder =  &mut graphics::MeshBuilder::new();
+        self.winner_pawn.draw(mesh_builder, Vec2::new(275., 250.), 20.);
+        let mesh = mesh_builder.build(ctx).unwrap();
+        graphics::draw(ctx, &mesh, graphics::DrawParam::default())?;
+        graphics::present(ctx)?;
+        Ok(())
+    }
+}
+
+enum GameState {
+    InGame(InGameState),
+    GameOver(GameOverState),
+}
+
+impl ggez::event::EventHandler<GameError> for GameState {
+    fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+        match self {
+            GameState::InGame(state) => state.update(ctx),
+            GameState::GameOver(state) => state.update(ctx),
+        }
+    }
+
+    fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+        match self {
+            GameState::InGame(state) => state.draw(ctx),
+            GameState::GameOver(state) => state.draw(ctx),
+        }
+    }
+}
+
+struct Game {
+    game_state : GameState,
+}
+
+
+impl Game {
+    fn new(grid_position: Vec2) -> Game {
+
+        let grid = Grid::new(0.3, grid_position, 40., 5.);
+        let in_game_state = InGameState::new(grid);
+        let game = Game {game_state: GameState::InGame(in_game_state)};
+        return game;
+    }
+}
+
+impl ggez::event::EventHandler<GameError> for Game {
+    fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+        self.game_state.update(ctx)?;
+        if let GameState::InGame(state) = &self.game_state {
+            if state.top_pawn_count == 0 {
+                self.game_state = GameState::GameOver(GameOverState{winner_pawn: state.bottom_player_pawn});
+            }
+            else if state.bottom_pawn_count == 0 {
+                self.game_state = GameState::GameOver(GameOverState{winner_pawn: state.top_player_pawn});
+            }
+        }
+
+        Ok(())
+    }
+
+    fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+        self.game_state.draw(ctx)
+    }
+}
+
 fn main(){
 
     let grid_position = Vec2::new(90., 90.);
-    let game_instance = Game::new(
-        Grid::new(0.3, grid_position, 40., 5.),
-    );
+    let game_instance = Game::new(grid_position);
 
     let mut c = conf::Conf::new();
     c.window_mode.width = 500_f32;
