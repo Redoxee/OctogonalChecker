@@ -277,8 +277,6 @@ impl Grid{
             }
         }
 
-        println!("array {} last_index {}" , grid.tiles.len(), array_index);
-
         grid
     }
 
