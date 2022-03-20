@@ -222,10 +222,11 @@ impl BoundingBox{
 
 struct Grid {
     tiles: [GridTile; NUMBER_OF_TILES],
-    width: usize,
-    height: usize,
+    tiles_on_row: i32,
+    tiles_on_col: i32,
     position: Vec2,
     scale: f32,
+    width: f32,
     bounding_box: BoundingBox,
 }
 
@@ -250,11 +251,12 @@ impl Grid{
         let bb_scale = scale * (tile_on_side + 1) as f32;
         let mut grid = Grid{
             tiles: [GridTile::None; NUMBER_OF_TILES],
-            width: tile_on_side,
-            height: GRID_SIDE + 1,
+            tiles_on_row: tile_on_side as i32,
+            tiles_on_col: GRID_SIDE as i32 + 1,
             position,
             scale,
-            bounding_box: BoundingBox::new(position.x - scale, position.y - scale, bb_scale, bb_scale)
+            bounding_box: BoundingBox::new(position.x - scale, position.y - scale, bb_scale, bb_scale),
+            width: GRID_SIDE as f32 * scale * 2.,
         };
 
         let half_tile_gap = scale;
@@ -264,7 +266,7 @@ impl Grid{
         let mut array_index = 0;
         for y_index in 0..=GRID_SIDE {
             for x_index in 0..=GRID_SIDE {
-                let position = Vec2::new((x_index) as f32, (y_index) as f32) * tile_gap;
+                let position = Vec2::new(x_index as f32, y_index as f32) * tile_gap;
                 grid.tiles[array_index] = GridTile::Quad(QuadTile::new(position, octogon_ratio, scale, thickness));
                 array_index += 1;
 
@@ -281,8 +283,8 @@ impl Grid{
     }
 
     fn get_index_from_coord(&self, coord: TileCoord) -> Option<usize> {
-        let width = self.width as i32;
-        let height = self.height as i32;
+        let width = self.tiles_on_row;
+        let height = self.tiles_on_col;
         if coord.x < 0 || coord.y < 0 || coord.x >= width || coord.y >= height {
             return Option::None
         }
@@ -296,8 +298,8 @@ impl Grid{
     }
 
     fn get_index_from_coord_unsafe(&self, coord: TileCoord) -> usize {
-        let width = self.width as i32;
-        let height = self.height as i32;
+        let width = self.tiles_on_row as i32;
+        let height = self.tiles_on_col as i32;
         
         if coord.y < height - 1 {
             return (coord.y * width + coord.x) as usize
@@ -310,8 +312,8 @@ impl Grid{
 
     fn get_coord_from_index(&self, index : usize) -> TileCoord {
         let index = index as i32;
-        let width = self.width as i32;
-        let height = self.height as i32;
+        let width = self.tiles_on_row as i32;
+        let height = self.tiles_on_col as i32;
         let mut result = TileCoord{x: index % width, y: index / width}; 
         if result.y == height - 1 {
             result.x = result.x * 2;
@@ -416,6 +418,9 @@ struct Game {
     pawns : [Option<Pawn>; NUMBER_OF_TILES],
     selected_pawn : isize,
     possible_plays: Vec<usize>,
+    current_player : PlayerSide,
+    top_player_pawn : Pawn,
+    bottom_player_pawn : Pawn,
 }
 
 impl Game {
@@ -429,6 +434,9 @@ impl Game {
             pawns: [Option::None; NUMBER_OF_TILES],
             selected_pawn: -1,
             possible_plays: Vec::new(),
+            top_player_pawn: Pawn {player: PlayerSide::Top, state: PawnState::None},
+            bottom_player_pawn: Pawn{player: PlayerSide::Bottom, state: PawnState::None},
+            current_player: PlayerSide::Bottom,
         };
 
         game.add_pawn(PlayerSide::Top, TileCoord{x: 3, y: 0});
@@ -523,10 +531,12 @@ impl ggez::event::EventHandler<GameError> for Game {
                 if self.selected_pawn < 0 {
                     match &mut self.pawns[self.hovered_tile as usize] {
                         Some(pawn) => {
-                            pawn.state = PawnState::Selected;
-                            self.selected_pawn = self.hovered_tile;
-                            let player_side = pawn.player;
-                            self.possible_plays = self.get_possible_plays(self.hovered_tile as usize, player_side);
+                            if self.current_player == pawn.player {
+                                pawn.state = PawnState::Selected;
+                                self.selected_pawn = self.hovered_tile;
+                                let player_side = pawn.player;
+                                self.possible_plays = self.get_possible_plays(self.hovered_tile as usize, player_side);
+                            }
                         }
 
                         None => {},
@@ -539,6 +549,13 @@ impl ggez::event::EventHandler<GameError> for Game {
                         self.unselect_pawn();
                         self.pawns[self.hovered_tile as usize] = self.pawns[source_index];
                         self.pawns[source_index] = None;
+
+                        if let Some(pawn) = self.pawns[self.hovered_tile as usize] {
+                            match pawn.player {
+                                PlayerSide::Top => self.current_player = PlayerSide::Bottom,
+                                PlayerSide::Bottom => self.current_player = PlayerSide::Top,
+                            }
+                        }
                     }
                     else {
                         self.unselect_pawn();
@@ -583,9 +600,19 @@ impl ggez::event::EventHandler<GameError> for Game {
                 pawn.draw(mesh_builder, self.grid.tiles[index].position(), self.grid.scale * 0.4);
             }
         }
-
+        
         let mesh = mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(self.grid.position))?; 
+
+
+        
+        let label = graphics::Text::new("Current player : ");
+        graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + Vec2::new(self.grid.width / 2. - label.width(ctx), -65.))).unwrap();
+        let mesh_builder = &mut graphics::MeshBuilder::new();
+        let current_pawn = match self.current_player {PlayerSide::Bottom => self.bottom_player_pawn, PlayerSide::Top => self.top_player_pawn};
+        current_pawn.draw(mesh_builder, self.grid.position + Vec2::new(self.grid.width / 2. + 15., -60.), self.grid.scale * 0.4);
+        let mesh =  mesh_builder.build(ctx).unwrap();
+        graphics::draw(ctx,&mesh, graphics::DrawParam::default()).unwrap();
 
         if self.hovered_tile > -1 {
             let coord = self.grid.get_coord_from_index(self.hovered_tile as usize);
@@ -601,7 +628,7 @@ impl ggez::event::EventHandler<GameError> for Game {
 
 fn main(){
 
-    let grid_position = Vec2::new(80., 80.);
+    let grid_position = Vec2::new(90., 90.);
     let game_instance = Game::new(
         Grid::new(0.3, grid_position, 40., 5.),
     );
