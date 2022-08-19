@@ -18,6 +18,12 @@ pub enum PlayerSide {
     Top,
 }
 
+#[derive(Clone, Copy)]
+pub struct BoardState {
+    tiles: [Option<Pawn>; NUMBER_OF_TILES],
+    current_player: PlayerSide,
+}
+
 pub struct Game {
     game_state : GameState,
 }
@@ -36,15 +42,16 @@ pub struct InGameState {
     prev_mouse_position: Vec2,
     was_pressed: bool,
     is_pressed: bool,
+    is_undo : bool,
     hovered_tile: isize,
-    board_state : [Option<Pawn>; NUMBER_OF_TILES],
+    board_state : BoardState,
     selected_pawn : isize,
     possible_plays: Vec<usize>,
-    current_player : PlayerSide,
     top_player_pawn : Pawn,
     bottom_player_pawn : Pawn,
     top_pawn_count : i8,
     bottom_pawn_count : i8,
+    previous_states: Vec<BoardState>,
 }
 
 impl Pawn {
@@ -72,45 +79,59 @@ impl Pawn {
     }
 }
 
+impl BoardState {
+    fn make_move(&self, source_index: usize, play_index: usize) -> BoardState{
+        let mut board = self.clone();
+        let pawn = board.tiles[source_index];
+        board.tiles[play_index] = pawn;
+        board.tiles[source_index] = Option::None;
+        return board;
+    }
+}
+
 impl InGameState {
     fn new(grid : Grid) -> InGameState{
         let mut game = InGameState{
             grid,
+            board_state: BoardState {
+                tiles: [Option::None; NUMBER_OF_TILES],
+                current_player: PlayerSide::Bottom,
+            },
             was_pressed: false,
             is_pressed: false,
+            is_undo: false,
             hovered_tile: -1,
             prev_mouse_position: Vec2::new(-1_f32, -1_f32),
-            board_state: [Option::None; NUMBER_OF_TILES],
             selected_pawn: -1,
             possible_plays: Vec::new(),
             top_player_pawn: Pawn {player: PlayerSide::Top},
             bottom_player_pawn: Pawn{player: PlayerSide::Bottom},
-            current_player: PlayerSide::Bottom,
             top_pawn_count: 3,
             bottom_pawn_count: 3,
+            previous_states: Vec::new(),
         };
 
-        game.board_state[game.grid.get_index_from_coord_unsafe(TileCoord{x: 3, y: 0})] = Some(Pawn{
+        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 3, y: 0})] = Some(Pawn{
             player: PlayerSide::Top,
         });
 
-        game.board_state[game.grid.get_index_from_coord_unsafe(TileCoord{x: 4, y: 0})] = Some(Pawn{
+        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 4, y: 0})] = Some(Pawn{
             player: PlayerSide::Top,
         });
 
-        game.board_state[game.grid.get_index_from_coord_unsafe(TileCoord{x: 5, y: 0})] = Some(Pawn{
+        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 5, y: 0})] = Some(Pawn{
             player: PlayerSide::Top,
         });
 
-        game.board_state[game.grid.get_index_from_coord_unsafe(TileCoord{x: 3, y: 3})] = Some(Pawn{
+        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 3, y: 3})] = Some(Pawn{
             player: PlayerSide::Bottom,
         });
 
-        game.board_state[game.grid.get_index_from_coord_unsafe(TileCoord{x: 4, y: 4})] = Some(Pawn{
+        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 4, y: 4})] = Some(Pawn{
             player: PlayerSide::Bottom,
         });
 
-        game.board_state[game.grid.get_index_from_coord_unsafe(TileCoord{x: 5, y: 3})] = Some(Pawn{
+        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 5, y: 3})] = Some(Pawn{
             player: PlayerSide::Bottom,
         });
 
@@ -157,20 +178,12 @@ impl InGameState {
             GridTile::None => panic!(),
         }
 
-        possible_plays.retain(|&index| match self.board_state[index] {
+        possible_plays.retain(|&index| match self.board_state.tiles[index] {
             Some(pawn) => { pawn.player != player_side },
             None => true
         });
 
         return possible_plays;
-    }
-    
-    fn make_move(board: [Option<Pawn>; NUMBER_OF_TILES], source_index: usize, play_index: usize) -> [Option<Pawn>; NUMBER_OF_TILES]{
-        let mut board = board.clone();
-        let pawn = board[source_index];
-        board[play_index] = pawn;
-        board[source_index] = Option::None;
-        return board;
     }
 }
 
@@ -190,9 +203,9 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         if !self.was_pressed && self.is_pressed {
             if self.hovered_tile > -1 {
                 if self.selected_pawn < 0 {
-                    match &mut self.board_state[self.hovered_tile as usize] {
+                    match &mut self.board_state.tiles[self.hovered_tile as usize] {
                         Some(pawn) => {
-                            if self.current_player == pawn.player {
+                            if self.board_state.current_player == pawn.player {
                                 self.selected_pawn = self.hovered_tile;
                                 let player_side = pawn.player;
                                 self.possible_plays = self.get_possible_plays(self.hovered_tile as usize, player_side);
@@ -208,7 +221,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                         let source_index = self.selected_pawn as usize;
                         self.unselect_pawn();
                         
-                        match self.board_state[self.hovered_tile as usize] {
+                        match self.board_state.tiles[self.hovered_tile as usize] {
                             Some(pawn) => {
                                 match pawn.player {
                                     PlayerSide::Top => { self.top_pawn_count = self.top_pawn_count - 1;},
@@ -218,20 +231,22 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                             None => {},
                         }
 
-                        self.board_state = InGameState::make_move(self.board_state, source_index, self.hovered_tile as usize);
+                        let new_state = self.board_state.make_move(source_index, self.hovered_tile as usize);
+                        self.previous_states.push(self.board_state);
+                        self.board_state = new_state;
 
-                        if let Some(pawn) = self.board_state[self.hovered_tile as usize] {
+                        if let Some(pawn) = self.board_state.tiles[self.hovered_tile as usize] {
                             match pawn.player {
-                                PlayerSide::Top => self.current_player = PlayerSide::Bottom,
-                                PlayerSide::Bottom => self.current_player = PlayerSide::Top,
+                                PlayerSide::Top => self.board_state.current_player = PlayerSide::Bottom,
+                                PlayerSide::Bottom => self.board_state.current_player = PlayerSide::Top,
                             }
                         }
                     }
                     else {
                         self.unselect_pawn();
-                        match &mut self.board_state[self.hovered_tile as usize] {
+                        match &mut self.board_state.tiles[self.hovered_tile as usize] {
                             Some(pawn) => {
-                                if self.current_player == pawn.player {
+                                if self.board_state.current_player == pawn.player {
                                     self.selected_pawn = self.hovered_tile;
                                     let player_side = pawn.player;
                                     self.possible_plays = self.get_possible_plays(self.hovered_tile as usize, player_side);
@@ -249,6 +264,16 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                 }
             }
         }
+
+        let undo = input::keyboard::is_key_pressed(ctx, event::KeyCode::Z) && input::keyboard::is_mod_active(ctx, event::KeyMods::CTRL);
+        if undo && !self.is_undo {
+            match self.previous_states.pop() {
+                Some(state) => {self.board_state = state;}
+                None => {println!("History Empty");}
+            }
+        }
+
+        self.is_undo = undo;
 
         Ok(())
     }
@@ -276,8 +301,8 @@ impl ggez::event::EventHandler<GameError> for InGameState {
             tile.build_mesh(style ,mesh_builder);
         }
 
-        for index in 0..self.board_state.len() {
-            if let Some(pawn) = self.board_state[index] {
+        for index in 0..NUMBER_OF_TILES {
+            if let Some(pawn) = self.board_state.tiles[index] {
                 pawn.draw(mesh_builder, self.grid.tiles[index].position(), self.grid.scale * 0.4, self.selected_pawn == index as isize);
             }
         }
@@ -285,12 +310,10 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         let mesh = mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(self.grid.position))?; 
 
-
-        
         let label = graphics::Text::new("Current player : ");
         graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + Vec2::new(self.grid.width / 2. - label.width(ctx), -65.))).unwrap();
         let mesh_builder = &mut graphics::MeshBuilder::new();
-        let current_pawn = match self.current_player {PlayerSide::Bottom => self.bottom_player_pawn, PlayerSide::Top => self.top_player_pawn};
+        let current_pawn = match self.board_state.current_player {PlayerSide::Bottom => self.bottom_player_pawn, PlayerSide::Top => self.top_player_pawn};
         current_pawn.draw(mesh_builder, self.grid.position + Vec2::new(self.grid.width / 2. + 15., -60.), self.grid.scale * 0.4, false);
         let mesh =  mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx,&mesh, graphics::DrawParam::default()).unwrap();
