@@ -45,6 +45,12 @@ impl ops::Add<TileCoord> for TileCoord{
     }
 }
 
+impl std::fmt::Display for TileCoord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{0},{1}]", self.x, self.y)
+    }
+}
+
 pub struct Grid {
     pub tiles: [GridTile; NUMBER_OF_TILES],
     pub tiles_on_row: i32,

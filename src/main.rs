@@ -2,13 +2,10 @@ use ggez::*;
 use glam::*;
 
 mod shape_style;
-
 mod tiles;
-
 mod utils;
-
 mod grid;
-
+mod brain;
 mod game;
 use crate::game::*;
 
@@ -26,7 +23,7 @@ fn main(){
         title:String::from("Octogonal chess"),
         samples: conf::NumSamples::One,
         vsync: true,
-        srgb:true,
+        srgb: true,
         icon:"".to_owned(),
     })
     .build()
