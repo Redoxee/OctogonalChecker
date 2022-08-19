@@ -150,3 +150,36 @@ fn position_in_poly(vertices : &[Vec2], point : &Vec2) -> bool{
 
     return inside;
 }
+
+#[derive(Clone, Copy)]
+pub enum GridTile {
+    Quad(QuadTile),
+    Octo(OctoTile),
+    None,
+}
+
+impl Shape for GridTile {
+    fn build_mesh(&self, style: ShapeStyle,mesh_builder: &mut MeshBuilder) {
+        match self {
+            GridTile::Quad(inner_tile) => inner_tile.build_mesh(style, mesh_builder),
+            GridTile::Octo(inner_tile) => inner_tile.build_mesh(style, mesh_builder),
+            GridTile::None => panic!()
+        }
+    }
+
+    fn contain_position(&self, position: &Vec2) -> bool {
+        match self {
+            GridTile::Quad(inner_tile) => inner_tile.contain_position(position),
+            GridTile::Octo(inner_tile) => inner_tile.contain_position(position),
+            GridTile::None => panic!()
+        }
+    }
+
+    fn position(&self) -> Vec2 {
+        match self {
+            GridTile::Quad(inner_tile) => inner_tile.position(),
+            GridTile::Octo(inner_tile) => inner_tile.position(),
+            GridTile::None => panic!()
+        }
+    }
+}
