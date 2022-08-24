@@ -81,8 +81,17 @@ impl Pawn {
     }
 }
 
+impl PlayerSide {
+    pub fn reverse(self) -> PlayerSide {
+        match self {
+            PlayerSide::Bottom => PlayerSide::Top,
+            PlayerSide::Top => PlayerSide::Bottom,
+        }
+    }
+}
+
 impl BoardState {
-    pub fn make_move(&self, source_index: usize, play_index: usize) -> BoardState{
+    pub fn make_move(&self, source_index: usize, play_index: usize) -> BoardState {
         let mut board = self.clone();
         let pawn = board.tiles[source_index];
         board.tiles[play_index] = pawn;
@@ -146,7 +155,6 @@ impl InGameState {
             bottom_pawn_count: 3,
             previous_states: Vec::new(),
             brain: Brain {
-                player_side: PlayerSide::Top,
             }
         };
 
@@ -244,8 +252,8 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                             PlayerSide::Bottom =>  PlayerSide::Top,
                         };
 
-                        if self.board_state.current_player == self.brain.player_side {
-                            self.brain.enumerate_moves(&self.board_state, &self.grid);
+                        if self.board_state.current_player == PlayerSide::Top {
+                            let best_play = Brain::search_best_play(&self.board_state, 6, &self.grid);
                         }
                     }
                     else {
