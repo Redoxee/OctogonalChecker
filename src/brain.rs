@@ -6,22 +6,31 @@ pub struct Brain {
 
 impl Brain {
 
-    pub fn search_best_play(board: &BoardState, iteration: u32,grid: &Grid) -> (usize, usize){
+    pub fn search_best_play(board: &BoardState, iteration: u32,grid: &Grid) -> Option<(usize, usize)>{
         let plays = Brain::find_all_plays(board, board.current_player, grid);
         let mut scores = Vec::new();
         for play in plays {
-            let resulting_boards = Brain::explore_all_plays(board, iteration, grid);
-            let score = 0;
+            let next_board = board.make_move(play.0, play.1);
+            let resulting_boards = Brain::explore_layers(&next_board, iteration * 2, board.current_player, grid);
+            println!("{0}->{1} leads to {2} plays", grid.get_coord_from_index(play.0), grid.get_coord_from_index(play.1), resulting_boards.len());
+            let mut score = 0;
+            let number_of_plays = resulting_boards.len() as i32;
+            if number_of_plays == 0 {
+                return None;
+            }
+
             for board in resulting_boards {
                 score = score + Brain::evaluate_play(board, board.current_player);
             }
 
-            score = score / resulting_boards.len() as i32;
+            score = score / number_of_plays;
             scores.push((play, score));
         }
 
-        scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        return scores[0].0;
+        scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
+
+        println!("Of {0} plays, picked {1}->{2}", scores.len(), grid.get_coord_from_index(scores[0].0.0), grid.get_coord_from_index(scores[0].0.1));
+        return Some(scores[0].0);
     }
 
     fn find_all_plays(board: &BoardState, player_side: PlayerSide, grid: &Grid) -> Vec<(usize, usize)> {
@@ -47,45 +56,25 @@ impl Brain {
         return all_plays;
     }
 
-    pub fn explore_all_plays(board: &BoardState, iteration: u32, grid: &Grid) -> Vec<BoardState>{
-        let possible_plays = Brain::explore_layer(board, iteration * 2, board.current_player, grid);
-        for board in &possible_plays {
-            Brain::evaluate_play(*board);
-        }
-
-        println!("found {0} results", possible_plays.len());
-    }
-
-    fn explore_layer(board: BoardState, layer: u32, player_side: PlayerSide, grid: &Grid) -> Vec<BoardState> {
-        println!("Exploring layer {0}", layer);
+    fn explore_layers(board: &BoardState, layer: u32, player_side: PlayerSide, grid: &Grid) -> Vec<BoardState> {
+        // println!("Exploring layer {0}", layer);
         let mut result = Vec::new();
-        for tile_index in 0..NUMBER_OF_TILES {
-            match board.tiles[tile_index] {
-                Some(pawn)=> {
-                    if pawn.player != player_side {
-                        continue;
-                    }
-                    
-                    let plays = board.get_possible_plays(tile_index, player_side, grid);
-                    println!("Possible play on layer {0} : {1}", layer, plays.len());
-
-                    for play in plays {
-                        let mut new_board = board.make_move(tile_index, play);
-                        if layer > 0 {
-                            new_board.current_player = new_board.current_player.reverse();
-                            return Brain::explore_layer(new_board, layer - 1, player_side.reverse(), grid);
-                        }
-                        else {
-                            result.push(new_board);
-                        }
-                    }
-                },
-                
-                None=>{},
+        let current_plays = Brain::find_all_plays(board, player_side, grid);
+        
+        for play in current_plays {
+            let next_board = board.make_move(play.0, play.1);
+            let next_side = player_side.reverse();
+            // println!("Looking at {0}->{1}", grid.get_coord_from_index(play.0), grid.get_coord_from_index(play.1));
+            if layer > 0 {
+                let resulting_plays = Brain::explore_layers(&next_board, layer - 1, next_side, grid);
+                result.extend(resulting_plays);
+            }
+            else
+            {
+                result.push(next_board);
             }
         }
 
-        println!("Stopped at layer {0}", layer);
         return result;
     }
 

@@ -53,7 +53,7 @@ pub struct InGameState {
     top_pawn_count : i8,
     bottom_pawn_count : i8,
     previous_states: Vec<BoardState>,
-    brain: Brain,
+    ai_timer: f64,
 }
 
 impl Pawn {
@@ -154,8 +154,7 @@ impl InGameState {
             top_pawn_count: 3,
             bottom_pawn_count: 3,
             previous_states: Vec::new(),
-            brain: Brain {
-            }
+            ai_timer: -1_f64,
         };
 
         game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 3, y: 0})] = Some(Pawn{
@@ -213,6 +212,28 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         self.prev_mouse_position = mouse_position;
         self.was_pressed = self.is_pressed;
         self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
+        
+        if self.board_state.current_player == PlayerSide::Top {
+            if self.ai_timer > 0_f64 {
+                let delta = timer::duration_to_f64(timer::delta(ctx));
+                self.ai_timer = self.ai_timer - delta;
+                if self.ai_timer <= 0_f64 {
+                    match Brain::search_best_play(&self.board_state, 1, &self.grid) {
+                        Some(best_play) => {
+                            self.previous_states.push(self.board_state.clone());
+                            self.board_state  = self.board_state.make_move(best_play.0, best_play.1);
+                        },
+
+                        None => {}
+                    }
+
+                    self.board_state.current_player = self.board_state.current_player.reverse();
+                }
+            }
+
+            return Ok(());
+        }
+
         if !self.was_pressed && self.is_pressed {
             if self.hovered_tile > -1 {
                 if self.selected_pawn < 0 {
@@ -246,15 +267,9 @@ impl ggez::event::EventHandler<GameError> for InGameState {
 
                         self.previous_states.push(self.board_state.clone());
                         self.board_state  = self.board_state.make_move(source_index, self.hovered_tile as usize);
+                        self.board_state.current_player = self.board_state.current_player.reverse();
 
-                        self.board_state.current_player = match self.board_state.current_player {
-                            PlayerSide::Top => PlayerSide::Bottom,
-                            PlayerSide::Bottom =>  PlayerSide::Top,
-                        };
-
-                        if self.board_state.current_player == PlayerSide::Top {
-                            let best_play = Brain::search_best_play(&self.board_state, 6, &self.grid);
-                        }
+                        self.ai_timer = 2_f64;
                     }
                     else {
                         self.unselect_pawn();
