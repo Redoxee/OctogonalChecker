@@ -7,9 +7,12 @@ use crate::utils::*;
 use crate::grid::*;
 use crate::brain::*;
 
+const MAX_PAWN_NUMBER: usize = 3;
+
 #[derive(Clone, Copy)]
 pub struct Pawn {
     pub player : PlayerSide,
+    pub table_index: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -20,9 +23,17 @@ pub enum PlayerSide {
 }
 
 #[derive(Clone, Copy)]
+pub struct PawnArray {
+    pub tile_indexes: [usize; MAX_PAWN_NUMBER],
+    pub count: usize,
+}
+
+#[derive(Clone, Copy)]
 pub struct BoardState {
     pub tiles: [Option<Pawn>; NUMBER_OF_TILES],
     pub current_player: PlayerSide,
+    pub top_pawns: PawnArray,
+    pub bottom_pawns: PawnArray,
 }
 
 pub struct Game {
@@ -90,36 +101,100 @@ impl PlayerSide {
     }
 }
 
+impl PawnArray {
+    pub fn new() -> PawnArray {
+        PawnArray {
+            tile_indexes: [0; MAX_PAWN_NUMBER],
+            count: 0,
+        }
+    }
+}
+
 impl BoardState {
+    pub fn add_pawn(&mut self, coord: TileCoord, player: PlayerSide) {
+        let tile_index = Grid::get_index_from_coord(coord).unwrap();
+        match self.tiles[tile_index] {
+            Some(_) => panic!(),
+            None => (),
+        }
+
+        let pawn_array = match player {
+            PlayerSide::Top => &mut self.top_pawns,
+            PlayerSide::Bottom => &mut self.bottom_pawns,
+        };
+
+        self.tiles[tile_index] = Some(Pawn{player, table_index: pawn_array.count});
+        (*pawn_array).tile_indexes[pawn_array.count] = tile_index;
+        (*pawn_array).count = pawn_array.count + 1;
+    }
+    
     pub fn make_move(&self, source_index: usize, play_index: usize) -> BoardState {
         let mut board = self.clone();
         let pawn = board.tiles[source_index];
+
+        match board.tiles[play_index] {
+            None=>(),
+            Some(pawn) => {
+                let pawn_array = match pawn.player {
+                    PlayerSide::Top => &mut board.top_pawns,
+                    PlayerSide::Bottom => &mut board.bottom_pawns
+                };
+                
+                if pawn_array.count > 1 {
+                    let replacing_pawn_tile_index = pawn_array.tile_indexes[pawn_array.count - 1];
+                    match board.tiles[replacing_pawn_tile_index] {
+                        Some(mut other_pawn) => {
+                            other_pawn.table_index = pawn.table_index;
+                        },
+                        None => { panic!()},
+                    }
+                    
+                    (*pawn_array).tile_indexes[pawn.table_index] = pawn_array.tile_indexes[pawn_array.count - 1];
+                }
+                
+                (*pawn_array).count = pawn_array.count - 1;
+            }
+        }
+
         board.tiles[play_index] = pawn;
         board.tiles[source_index] = Option::None;
+
+        match pawn {
+            Some(pawn) => {
+                let tile_array = match pawn.player {
+                    PlayerSide::Top => &mut board.top_pawns, 
+                    PlayerSide::Bottom => &mut board.bottom_pawns
+                };
+
+                (*tile_array).tile_indexes[pawn.table_index] = play_index;
+            }
+            None => {panic!();}
+        }
+
         return board;
     }
     
     pub fn get_possible_plays(&self, tile_index: usize, player_side: PlayerSide, grid: &Grid) -> Vec<usize>{
-        let coord = grid.get_coord_from_index(tile_index);
+        let coord = Grid::get_coord_from_index(tile_index);
         let mut possible_plays = Vec::new();
         match grid[coord] {
             GridTile::Quad(_) => {
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y }) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y }) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y - 1}) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y - 1}) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y - 1}) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y - 1}) {possible_plays.push(index)};
             },
 
             GridTile::Octo(_) => {
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x + 2, y: coord.y }) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x - 2, y: coord.y }) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x    , y: coord.y + 1}) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x    , y: coord.y - 1}) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 2, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 2, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x    , y: coord.y + 1}) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x    , y: coord.y - 1}) {possible_plays.push(index)};
 
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y }) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y }) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y + 1}) {possible_plays.push(index)};
-                if let Some(index) = grid.get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y + 1}) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y }) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y + 1}) {possible_plays.push(index)};
+                if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y + 1}) {possible_plays.push(index)};
             },
 
             GridTile::None => panic!(),
@@ -141,6 +216,8 @@ impl InGameState {
             board_state: BoardState {
                 tiles: [Option::None; NUMBER_OF_TILES],
                 current_player: PlayerSide::Bottom,
+                top_pawns: PawnArray::new(),
+                bottom_pawns: PawnArray::new(),
             },
             was_pressed: false,
             is_pressed: false,
@@ -149,37 +226,23 @@ impl InGameState {
             prev_mouse_position: Vec2::new(-1_f32, -1_f32),
             selected_pawn: -1,
             possible_plays: Vec::new(),
-            top_player_pawn: Pawn {player: PlayerSide::Top},
-            bottom_player_pawn: Pawn{player: PlayerSide::Bottom},
+            top_player_pawn: Pawn {player: PlayerSide::Top, table_index: 0},
+            bottom_player_pawn: Pawn{player: PlayerSide::Bottom, table_index: 0},
             top_pawn_count: 3,
             bottom_pawn_count: 3,
             previous_states: Vec::new(),
             ai_timer: -1_f64,
         };
 
-        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 3, y: 0})] = Some(Pawn{
-            player: PlayerSide::Top,
-        });
+        game.board_state.add_pawn(TileCoord{x:3, y: 0}, PlayerSide::Top);
+        game.board_state.add_pawn(TileCoord{x:4, y: 0}, PlayerSide::Top);
+        game.board_state.add_pawn(TileCoord{x:5, y: 0}, PlayerSide::Top);
 
-        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 4, y: 0})] = Some(Pawn{
-            player: PlayerSide::Top,
-        });
+        game.board_state.add_pawn(TileCoord{x:3, y: 3}, PlayerSide::Bottom);
+        game.board_state.add_pawn(TileCoord{x:4, y: 4}, PlayerSide::Bottom);
+        game.board_state.add_pawn(TileCoord{x:5, y: 3}, PlayerSide::Bottom);
 
-        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 5, y: 0})] = Some(Pawn{
-            player: PlayerSide::Top,
-        });
-
-        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 3, y: 3})] = Some(Pawn{
-            player: PlayerSide::Bottom,
-        });
-
-        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 4, y: 4})] = Some(Pawn{
-            player: PlayerSide::Bottom,
-        });
-
-        game.board_state.tiles[game.grid.get_index_from_coord_unsafe(TileCoord{x: 5, y: 3})] = Some(Pawn{
-            player: PlayerSide::Bottom,
-        });
+        println!("{0}", game.board_state.top_pawns.count);
 
         return game;
     }
@@ -218,6 +281,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                 let delta = timer::duration_to_f64(timer::delta(ctx));
                 self.ai_timer = self.ai_timer - delta;
                 if self.ai_timer <= 0_f64 {
+                    /*  
                     match Brain::search_best_play(&self.board_state, 1, &self.grid) {
                         Some(best_play) => {
                             self.previous_states.push(self.board_state.clone());
@@ -228,10 +292,11 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                     }
 
                     self.board_state.current_player = self.board_state.current_player.reverse();
+                    */
                 }
             }
 
-            return Ok(());
+            // return Ok(());
         }
 
         if !self.was_pressed && self.is_pressed {
@@ -348,7 +413,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         graphics::draw(ctx,&mesh, graphics::DrawParam::default()).unwrap();
 
         if self.hovered_tile > -1 {
-            let coord = self.grid.get_coord_from_index(self.hovered_tile as usize);
+            let coord = Grid::get_coord_from_index(self.hovered_tile as usize);
             let label = format!("[{},{}] = {}", coord.x, coord.y, self.hovered_tile);
             let label = graphics::Text::new(label);
             graphics::draw(ctx, &label, graphics::DrawParam::default())?;
