@@ -178,18 +178,19 @@ impl BoardState {
         return board;
     }
     
-    pub fn get_possible_plays(&self, tile_index: usize, player_side: PlayerSide, grid: &Grid) -> Vec<usize>{
+    pub fn get_possible_moves(&self, tile_index: usize) -> Vec<usize> {
         let coord = Grid::get_coord_from_index(tile_index);
         let mut possible_plays = Vec::new();
-        match grid[coord] {
-            GridTile::Quad(_) => {
+        
+        match Grid::get_tile_shape_from_index(tile_index) {
+            TileShape::Quad => {
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y }) {possible_plays.push(index)};
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y }) {possible_plays.push(index)};
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y - 1}) {possible_plays.push(index)};
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y - 1}) {possible_plays.push(index)};
             },
 
-            GridTile::Octo(_) => {
+            TileShape::Octo => {
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 2, y: coord.y }) {possible_plays.push(index)};
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 2, y: coord.y }) {possible_plays.push(index)};
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x    , y: coord.y + 1}) {possible_plays.push(index)};
@@ -200,9 +201,13 @@ impl BoardState {
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x + 1, y: coord.y + 1}) {possible_plays.push(index)};
                 if let Some(index) = Grid::get_index_from_coord(TileCoord{ x: coord.x - 1, y: coord.y + 1}) {possible_plays.push(index)};
             },
-
-            GridTile::None => panic!(),
         }
+
+        return possible_plays;
+    }
+
+    pub fn get_possible_plays(&self, tile_index: usize, player_side: PlayerSide) -> Vec<usize> {
+        let mut possible_plays = self.get_possible_moves(tile_index);
 
         possible_plays.retain(|&index| match self.tiles[index] {
             Some(pawn) => { pawn.player != player_side },
@@ -284,7 +289,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                 let delta = timer::duration_to_f64(timer::delta(ctx));
                 self.ai_timer = self.ai_timer - delta;
                 if self.ai_timer <= 0_f64 {
-                    match Brain::search_best_play(&self.board_state, 2, &self.grid) {
+                    match Brain::search_best_play(&self.board_state, 2) {
                         Some(best_play) => {
                             self.previous_states.push(self.board_state.clone());
                             self.board_state  = self.board_state.make_move(best_play.0, best_play.1);
@@ -309,7 +314,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                             if self.board_state.current_player == pawn.player {
                                 self.selected_pawn = self.hovered_tile;
                                 let player_side = pawn.player;
-                                self.possible_plays = self.board_state.get_possible_plays(self.hovered_tile as usize, player_side, &self.grid);
+                                self.possible_plays = self.board_state.get_possible_plays(self.hovered_tile as usize, player_side);
                             }
                         }
 
@@ -345,7 +350,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                                 if self.board_state.current_player == pawn.player {
                                     self.selected_pawn = self.hovered_tile;
                                     let player_side = pawn.player;
-                                    self.possible_plays = self.board_state.get_possible_plays(self.hovered_tile as usize, player_side, &self.grid);
+                                    self.possible_plays = self.board_state.get_possible_plays(self.hovered_tile as usize, player_side);
                                 }
                             }
     
@@ -415,7 +420,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         graphics::draw(ctx,&mesh, graphics::DrawParam::default()).unwrap();
 
 
-        let mut label = format!("{0:?}\n{1:?}\n", self.board_state.top_pawns, self.board_state.bottom_pawns);
+        let mut label = "".to_owned();// format!("{0:?}\n{1:?}\n", self.board_state.top_pawns, self.board_state.bottom_pawns);
         if self.hovered_tile > -1 {
             let coord = Grid::get_coord_from_index(self.hovered_tile as usize);
             label.push_str(&format!("[{},{}] = {}", coord.x, coord.y, self.hovered_tile));

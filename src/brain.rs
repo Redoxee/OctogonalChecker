@@ -6,12 +6,12 @@ pub struct Brain {
 
 impl Brain {
 
-    pub fn search_best_play(board: &BoardState, iteration: u32,grid: &Grid) -> Option<(usize, usize)>{
-        let plays = Brain::find_all_plays(board, board.current_player, grid);
+    pub fn search_best_play(board: &BoardState, iteration: u32) -> Option<(usize, usize)>{
+        let plays = Brain::find_all_plays(board, board.current_player);
         let mut scores = Vec::new();
         for play in plays {
             let next_board = board.make_move(play.0, play.1);
-            let resulting_boards = Brain::explore_layers(&next_board, iteration * 2, board.current_player, grid);
+            let resulting_boards = Brain::explore_layers(&next_board, iteration * 2, board.current_player);
             println!("{0}->{1} leads to {2} plays", Grid::get_coord_from_index(play.0), Grid::get_coord_from_index(play.1), resulting_boards.len());
             let mut score = 0;
             let number_of_plays = resulting_boards.len() as i32;
@@ -34,7 +34,7 @@ impl Brain {
         return Some(scores[0].0);
     }
 
-    fn find_all_plays(board: &BoardState, player_side: PlayerSide, grid: &Grid) -> Vec<(usize, usize)> {
+    fn find_all_plays(board: &BoardState, player_side: PlayerSide) -> Vec<(usize, usize)> {
         let mut all_plays = Vec::new();
 
         let pawn_indexes = match player_side { PlayerSide::Top => board.top_pawns, PlayerSide::Bottom => board.bottom_pawns };
@@ -46,7 +46,7 @@ impl Brain {
                         panic!();
                     }
                     
-                    let plays = board.get_possible_plays(pawn_index, player_side, grid);
+                    let plays = board.get_possible_plays(pawn_index, player_side);
                     for play in plays {
                         all_plays.push((pawn_index, play));
                     }
@@ -59,9 +59,9 @@ impl Brain {
         return all_plays;
     }
 
-    fn explore_layers(board: &BoardState, layer: u32, player_side: PlayerSide, grid: &Grid) -> Vec<BoardState> {
+    fn explore_layers(board: &BoardState, layer: u32, player_side: PlayerSide) -> Vec<BoardState> {
         let mut result = Vec::new();
-        let current_plays = Brain::find_all_plays(board, player_side, grid);
+        let current_plays = Brain::find_all_plays(board, player_side);
         
         for play in current_plays {
             let mut next_board = board.make_move(play.0, play.1);
@@ -69,7 +69,7 @@ impl Brain {
             next_board.current_player = next_side;
             
             if layer > 0 {
-                let resulting_plays = Brain::explore_layers(&next_board, layer - 1, next_side, grid);
+                let resulting_plays = Brain::explore_layers(&next_board, layer - 1, next_side);
                 result.extend(resulting_plays);
             }
             else

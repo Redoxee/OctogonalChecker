@@ -158,6 +158,11 @@ pub enum GridTile {
     None,
 }
 
+pub enum TileShape {
+    Quad,
+    Octo,
+}
+
 impl Shape for GridTile {
     fn build_mesh(&self, style: ShapeStyle,mesh_builder: &mut MeshBuilder) {
         match self {

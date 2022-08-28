@@ -135,6 +135,28 @@ impl Grid{
         return result;
     }
 
+    /*
+    pub fn get_tile_shape(coord: TileCoord) -> TileShape {
+        if coord.x % 2 == 0 {
+            return TileShape::Quad;
+        }
+        else {
+            return TileShape::Octo;
+        }
+    }
+    // */
+
+    // /*
+    pub fn get_tile_shape_from_index(tile_index: usize) -> TileShape {
+        if tile_index % TILES_ON_ROW % 2 == 0 {
+            return TileShape::Quad;
+        }
+        else {
+            return TileShape::Octo;
+        }
+    }
+    // */
+
     pub fn get_tile_at(&self, position: Vec2) -> isize{
         if !self.bounding_box.is_in(&position) {
             return -1
