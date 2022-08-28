@@ -10,6 +10,7 @@ use crate::brain::*;
 const MAX_PAWN_NUMBER: usize = 3;
 
 #[derive(Clone, Copy)]
+#[derive(Debug)]
 pub struct Pawn {
     pub player : PlayerSide,
     pub table_index: usize,
@@ -17,17 +18,20 @@ pub struct Pawn {
 
 #[derive(Clone, Copy)]
 #[derive(PartialEq, Eq)]
+#[derive(Debug)]
 pub enum PlayerSide {
     Bottom,
     Top,
 }
 
 #[derive(Clone, Copy)]
+#[derive(Debug)]
 pub struct PawnArray {
     pub tile_indexes: [usize; MAX_PAWN_NUMBER],
     pub count: usize,
 }
 
+#[derive(Debug)]
 #[derive(Clone, Copy)]
 pub struct BoardState {
     pub tiles: [Option<Pawn>; NUMBER_OF_TILES],
@@ -130,7 +134,6 @@ impl BoardState {
     
     pub fn make_move(&self, source_index: usize, play_index: usize) -> BoardState {
         let mut board = self.clone();
-        let pawn = board.tiles[source_index];
 
         match board.tiles[play_index] {
             None=>(),
@@ -140,15 +143,14 @@ impl BoardState {
                     PlayerSide::Bottom => &mut board.bottom_pawns
                 };
                 
-                if pawn_array.count > 1 {
+                if pawn_array.count > 1 && pawn.table_index < pawn_array.count - 1 { 
                     let replacing_pawn_tile_index = pawn_array.tile_indexes[pawn_array.count - 1];
-                    match board.tiles[replacing_pawn_tile_index] {
-                        Some(mut other_pawn) => {
-                            other_pawn.table_index = pawn.table_index;
-                        },
-                        None => { panic!()},
-                    }
-                    
+                    let replacing_pawn = match &mut board.tiles[replacing_pawn_tile_index] {
+                        Some(other_pawn) => other_pawn,
+                        None => panic!(),
+                    };
+
+                    (*replacing_pawn).table_index = pawn.table_index;
                     (*pawn_array).tile_indexes[pawn.table_index] = pawn_array.tile_indexes[pawn_array.count - 1];
                 }
                 
@@ -156,6 +158,7 @@ impl BoardState {
             }
         }
 
+        let pawn = board.tiles[source_index];
         board.tiles[play_index] = pawn;
         board.tiles[source_index] = Option::None;
 
@@ -167,7 +170,8 @@ impl BoardState {
                 };
 
                 (*tile_array).tile_indexes[pawn.table_index] = play_index;
-            }
+                assert!(pawn.table_index < tile_array.count);
+            },
             None => {panic!();}
         }
 
@@ -242,8 +246,6 @@ impl InGameState {
         game.board_state.add_pawn(TileCoord{x:4, y: 4}, PlayerSide::Bottom);
         game.board_state.add_pawn(TileCoord{x:5, y: 3}, PlayerSide::Bottom);
 
-        println!("{0}", game.board_state.top_pawns.count);
-
         return game;
     }
 
@@ -276,13 +278,13 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         self.was_pressed = self.is_pressed;
         self.is_pressed = input::mouse::button_pressed(ctx, event::MouseButton::Left);
         
+       // /*
         if self.board_state.current_player == PlayerSide::Top {
             if self.ai_timer > 0_f64 {
                 let delta = timer::duration_to_f64(timer::delta(ctx));
                 self.ai_timer = self.ai_timer - delta;
                 if self.ai_timer <= 0_f64 {
-                    /*  
-                    match Brain::search_best_play(&self.board_state, 1, &self.grid) {
+                    match Brain::search_best_play(&self.board_state, 2, &self.grid) {
                         Some(best_play) => {
                             self.previous_states.push(self.board_state.clone());
                             self.board_state  = self.board_state.make_move(best_play.0, best_play.1);
@@ -292,12 +294,12 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                     }
 
                     self.board_state.current_player = self.board_state.current_player.reverse();
-                    */
                 }
             }
 
-            // return Ok(());
+            return Ok(());
         }
+        // */
 
         if !self.was_pressed && self.is_pressed {
             if self.hovered_tile > -1 {
@@ -412,12 +414,15 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         let mesh =  mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx,&mesh, graphics::DrawParam::default()).unwrap();
 
+
+        let mut label = format!("{0:?}\n{1:?}\n", self.board_state.top_pawns, self.board_state.bottom_pawns);
         if self.hovered_tile > -1 {
             let coord = Grid::get_coord_from_index(self.hovered_tile as usize);
-            let label = format!("[{},{}] = {}", coord.x, coord.y, self.hovered_tile);
-            let label = graphics::Text::new(label);
-            graphics::draw(ctx, &label, graphics::DrawParam::default())?;
+            label.push_str(&format!("[{},{}] = {}", coord.x, coord.y, self.hovered_tile));
         }
+
+        let label = graphics::Text::new(label);
+        graphics::draw(ctx, &label, graphics::DrawParam::default())?;
 
         graphics::present(ctx)?;
         Ok(())
