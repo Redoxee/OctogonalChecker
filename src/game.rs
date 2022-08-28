@@ -9,6 +9,8 @@ use crate::brain::*;
 
 const MAX_PAWN_NUMBER: usize = 3;
 
+const AI_PAUSE_TIME: f64 = 1_f64;
+
 #[derive(Clone, Copy)]
 #[derive(Debug)]
 pub struct Pawn {
@@ -341,7 +343,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                         self.board_state  = self.board_state.make_move(source_index, self.hovered_tile as usize);
                         self.board_state.current_player = self.board_state.current_player.reverse();
 
-                        self.ai_timer = 2_f64;
+                        self.ai_timer = AI_PAUSE_TIME;
                     }
                     else {
                         self.unselect_pawn();

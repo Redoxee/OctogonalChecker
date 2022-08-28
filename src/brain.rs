@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::game::*;
 use crate::grid::*;
 
@@ -79,6 +81,22 @@ impl Brain {
         }
 
         return result;
+    }
+
+
+    pub fn get_two_layer_moves(board: BoardState, tile_index: usize) -> (Vec<usize>, Vec<usize>){
+        let first_layer = board.get_possible_moves(tile_index);
+        let mut second_layer:HashSet<usize> = HashSet::new();
+        for play_index in &first_layer {
+            let layer = board.get_possible_moves(*play_index);
+            second_layer.extend(layer.iter());
+        }
+
+        let first_layer_map : HashSet<usize> = (&first_layer).into_iter().map(|element| *element).collect();
+        let second_layer = &second_layer - &first_layer_map;
+        let mut second_layer : Vec<usize> = second_layer.into_iter().filter(|element| element != &tile_index).collect();
+        second_layer.sort_by(|left, right|left.cmp(right));
+        return (first_layer, second_layer);
     }
 
     pub fn evaluate_play(board: BoardState, player_side: PlayerSide) -> i32 {
