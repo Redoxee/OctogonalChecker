@@ -13,20 +13,9 @@ impl Brain {
         let mut scores = Vec::new();
         for play in plays {
             let next_board = board.make_move(play.0, play.1);
-            let resulting_boards = Brain::explore_layers(&next_board, iteration * 2, board.current_player);
-            println!("{0}->{1} leads to {2} plays", Grid::get_coord_from_index(play.0), Grid::get_coord_from_index(play.1), resulting_boards.len());
-            let mut score = 0;
-            let number_of_plays = resulting_boards.len() as i32;
-            if number_of_plays == 0 {
-                return None;
-            }
-
-            for board in resulting_boards {
-                score = score + Brain::evaluate_play(board, board.current_player);
-            }
-
-            score = score / number_of_plays;
-            scores.push((play, score));
+            let  predicted_result = Brain::explore_branch(next_board, iteration * 2 - 1);
+            
+            scores.push((play, predicted_result.1));
         }
 
         scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
@@ -34,6 +23,29 @@ impl Brain {
         println!("{:?}", scores);
         println!("Of {0} plays, picked {1}->{2}", scores.len(), Grid::get_coord_from_index(scores[0].0.0), Grid::get_coord_from_index(scores[0].0.1));
         return Some(scores[0].0);
+    }
+
+    fn explore_branch(board: BoardState, layer: u32) -> (BoardState, i32){
+        let mut result = (board, -100);
+        for _ in 0..layer {
+            let plays = Brain::find_all_plays(&result.0, result.0.current_player);
+            if plays.len() == 0 {
+                break;
+            }
+
+            let mut ranked_plays = Vec::new();
+            for play in plays {
+                let next_board = result.0.make_move(play.0, play.1);
+                let evaluation = Brain::evaluate_play(next_board, board.current_player);
+                ranked_plays.push((next_board, evaluation));
+            }
+
+            ranked_plays.sort_by(|left, right| left.1.cmp(&right.1).reverse());
+            result = ranked_plays[0];
+            result.0.current_player = result.0.current_player.reverse();
+        }
+
+        return result;
     }
 
     fn find_all_plays(board: &BoardState, player_side: PlayerSide) -> Vec<(usize, usize)> {
@@ -61,28 +73,6 @@ impl Brain {
         return all_plays;
     }
 
-    fn explore_layers(board: &BoardState, layer: u32, player_side: PlayerSide) -> Vec<BoardState> {
-        let mut result = Vec::new();
-        let current_plays = Brain::find_all_plays(board, player_side);
-        
-        for play in current_plays {
-            let mut next_board = board.make_move(play.0, play.1);
-            let next_side = player_side.reverse();
-            next_board.current_player = next_side;
-            
-            if layer > 0 {
-                let resulting_plays = Brain::explore_layers(&next_board, layer - 1, next_side);
-                result.extend(resulting_plays);
-            }
-            else
-            {
-                result.push(next_board);
-            }
-        }
-
-        return result;
-    }
-
 
     pub fn get_two_layer_moves(board: BoardState, tile_index: usize) -> (Vec<usize>, Vec<usize>){
         let first_layer = board.get_possible_moves(tile_index);
@@ -100,22 +90,47 @@ impl Brain {
     }
 
     pub fn evaluate_play(board: BoardState, player_side: PlayerSide) -> i32 {
-        if player_side != board.current_player {
-            return -100;
-        }
-
         let my_pawns = match player_side { PlayerSide::Top => board.top_pawns, PlayerSide::Bottom => board.bottom_pawns };
         let their_pawns = match player_side { PlayerSide::Top => board.bottom_pawns, PlayerSide::Bottom => board.top_pawns };
 
         let mut score = 0;
-        score = score + my_pawns.count as i32 * 5;
-        score = score - their_pawns.count as i32 * 4;
+        score = score + my_pawns.count as i32 * 20;
+        score = score - their_pawns.count as i32 * 20;
+
+        for index in 0..my_pawns.count {
+            let two_layers = Brain::get_two_layer_moves(board, my_pawns.tile_indexes[index]);
+            for tile_index in two_layers.0 {
+                match board.tiles[tile_index] {
+                    None => {},
+                    Some(pawn) => {
+                        if pawn.player == player_side {
+                            score = score + 5;
+                        }
+                        else {
+                            score = score - 6;
+                        }
+                    }
+                }
+            }
+
+            for tile_index in two_layers.1 {
+                match board.tiles[tile_index] {
+                    None => {},
+                    Some(pawn) => {
+                        if pawn.player != player_side {
+                            score = score + 6;
+                        }
+                    }
+                }
+            }
+        }
+
         if my_pawns.count == 0 {
             score = score - 200;
         }
 
         if their_pawns.count == 0 {
-            score = score + 100;
+            score = score + 200;
         }
 
         return score;
