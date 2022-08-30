@@ -1,1 +1,1 @@
-![Example of interaction on the octogonal grid](medias/OctoChess.gif)
+![Example of interaction on the octogonal grid](medias/OctoChess_Ai.gif)
