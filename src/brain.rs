@@ -13,39 +13,44 @@ impl Brain {
         let mut scores = Vec::new();
         for play in plays {
             let next_board = board.make_move(play.0, play.1);
-            let  predicted_result = Brain::explore_branch(next_board, iteration * 2 - 1);
+            let predicted_result = Brain::explore_branch(next_board, iteration * 2 - 1);
             
-            scores.push((play, predicted_result.1));
+            let predicted_result = if predicted_result.1 != board.current_player {-predicted_result.0} else {predicted_result.0};
+
+            scores.push((play, predicted_result));
         }
 
         scores.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
 
+        /*
         println!("{:?}", scores);
         println!("Of {0} plays, picked {1}->{2}", scores.len(), Grid::get_coord_from_index(scores[0].0.0), Grid::get_coord_from_index(scores[0].0.1));
+         // */
         return Some(scores[0].0);
     }
 
-    fn explore_branch(board: BoardState, layer: u32) -> (BoardState, i32){
-        let mut result = (board, -100);
+    fn explore_branch(board: BoardState, layer: u32) -> (i32, PlayerSide){
+        let mut result = -10000;
+        let mut current_board = board;
         for _ in 0..layer {
-            let plays = Brain::find_all_plays(&result.0, result.0.current_player);
+            let plays = Brain::find_all_plays(&current_board, current_board.current_player);
             if plays.len() == 0 {
                 break;
             }
 
             let mut ranked_plays = Vec::new();
             for play in plays {
-                let next_board = result.0.make_move(play.0, play.1);
-                let evaluation = Brain::evaluate_play(next_board, board.current_player);
+                let next_board = current_board.make_move(play.0, play.1);
+                let evaluation = Brain::evaluate_play(next_board);
                 ranked_plays.push((next_board, evaluation));
             }
 
             ranked_plays.sort_by(|left, right| left.1.cmp(&right.1).reverse());
-            result = ranked_plays[0];
-            result.0.current_player = result.0.current_player.reverse();
+            result = ranked_plays[0].1;
+            current_board = ranked_plays[0].0;
         }
 
-        return result;
+        return (result, current_board.current_player);
     }
 
     fn find_all_plays(board: &BoardState, player_side: PlayerSide) -> Vec<(usize, usize)> {
@@ -89,13 +94,13 @@ impl Brain {
         return (first_layer, second_layer);
     }
 
-    pub fn evaluate_play(board: BoardState, player_side: PlayerSide) -> i32 {
-        let my_pawns = match player_side { PlayerSide::Top => board.top_pawns, PlayerSide::Bottom => board.bottom_pawns };
-        let their_pawns = match player_side { PlayerSide::Top => board.bottom_pawns, PlayerSide::Bottom => board.top_pawns };
+    pub fn evaluate_play(board: BoardState) -> i32 {
+        let my_pawns = match board.current_player { PlayerSide::Top => board.top_pawns, PlayerSide::Bottom => board.bottom_pawns };
+        let their_pawns = match board.current_player { PlayerSide::Top => board.bottom_pawns, PlayerSide::Bottom => board.top_pawns };
 
         let mut score = 0;
-        score = score + my_pawns.count as i32 * 20;
-        score = score - their_pawns.count as i32 * 20;
+        score = score + my_pawns.count as i32 * 190;
+        score = score - their_pawns.count as i32 * 200;
 
         for index in 0..my_pawns.count {
             let two_layers = Brain::get_two_layer_moves(board, my_pawns.tile_indexes[index]);
@@ -103,11 +108,11 @@ impl Brain {
                 match board.tiles[tile_index] {
                     None => {},
                     Some(pawn) => {
-                        if pawn.player == player_side {
-                            score = score + 5;
+                        if pawn.player == board.current_player {
+                            score = score + 10;
                         }
                         else {
-                            score = score - 6;
+                            score = score - 20;
                         }
                     }
                 }
@@ -117,8 +122,8 @@ impl Brain {
                 match board.tiles[tile_index] {
                     None => {},
                     Some(pawn) => {
-                        if pawn.player != player_side {
-                            score = score + 6;
+                        if pawn.player != board.current_player {
+                            score = score + 30;
                         }
                     }
                 }
@@ -126,11 +131,11 @@ impl Brain {
         }
 
         if my_pawns.count == 0 {
-            score = score - 200;
+            score = score - 2000;
         }
 
         if their_pawns.count == 0 {
-            score = score + 200;
+            score = score + 2000;
         }
 
         return score;

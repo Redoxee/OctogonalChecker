@@ -67,8 +67,6 @@ pub struct InGameState {
     possible_plays: Vec<usize>,
     top_player_pawn : Pawn,
     bottom_player_pawn : Pawn,
-    top_pawn_count : i8,
-    bottom_pawn_count : i8,
     previous_states: Vec<BoardState>,
     ai_timer: f64,
 }
@@ -177,6 +175,7 @@ impl BoardState {
             None => {panic!();}
         }
 
+        board.current_player = board.current_player.reverse();
         return board;
     }
     
@@ -239,8 +238,6 @@ impl InGameState {
             possible_plays: Vec::new(),
             top_player_pawn: Pawn {player: PlayerSide::Top, table_index: 0},
             bottom_player_pawn: Pawn{player: PlayerSide::Bottom, table_index: 0},
-            top_pawn_count: 3,
-            bottom_pawn_count: 3,
             previous_states: Vec::new(),
             ai_timer: -1_f64,
         };
@@ -291,7 +288,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                 let delta = timer::duration_to_f64(timer::delta(ctx));
                 self.ai_timer = self.ai_timer - delta;
                 if self.ai_timer <= 0_f64 {
-                    match Brain::search_best_play(&self.board_state, 2) {
+                    match Brain::search_best_play(&self.board_state, 10) {
                         Some(best_play) => {
                             self.previous_states.push(self.board_state.clone());
                             self.board_state  = self.board_state.make_move(best_play.0, best_play.1);
@@ -299,8 +296,6 @@ impl ggez::event::EventHandler<GameError> for InGameState {
 
                         None => {}
                     }
-
-                    self.board_state.current_player = self.board_state.current_player.reverse();
                 }
             }
 
@@ -328,20 +323,9 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                     if self.hovered_tile != self.selected_pawn && self.possible_plays.contains(&(self.hovered_tile as usize)) {
                         let source_index = self.selected_pawn as usize;
                         self.unselect_pawn();
-                        
-                        match self.board_state.tiles[self.hovered_tile as usize] {
-                            Some(pawn) => {
-                                match pawn.player {
-                                    PlayerSide::Top => { self.top_pawn_count = self.top_pawn_count - 1;},
-                                    PlayerSide::Bottom => { self.bottom_pawn_count = self.bottom_pawn_count - 1;},
-                                }
-                            },
-                            None => {},
-                        }
 
                         self.previous_states.push(self.board_state.clone());
                         self.board_state  = self.board_state.make_move(source_index, self.hovered_tile as usize);
-                        self.board_state.current_player = self.board_state.current_player.reverse();
 
                         self.ai_timer = AI_PAUSE_TIME;
                     }
@@ -484,10 +468,10 @@ impl ggez::event::EventHandler<GameError> for Game {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.game_state.update(ctx)?;
         if let GameState::InGame(state) = &self.game_state {
-            if state.top_pawn_count == 0 {
+            if state.board_state.top_pawns.count == 0 {
                 self.game_state = GameState::GameOver(GameOverState{winner_pawn: state.bottom_player_pawn});
             }
-            else if state.bottom_pawn_count == 0 {
+            else if state.board_state.bottom_pawns.count == 0 {
                 self.game_state = GameState::GameOver(GameOverState{winner_pawn: state.top_player_pawn});
             }
         }
