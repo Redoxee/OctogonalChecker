@@ -405,6 +405,20 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         let mesh =  mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx,&mesh, graphics::DrawParam::default()).unwrap();
 
+        let font_height = 24_f32;
+        for index in 0..TILES_ON_ROW {
+            let label = (('A' as u8 + index as u8) as char).to_string();
+            let mut label = graphics::Text::new(label);
+            label.set_font(graphics::Font::default(), graphics::PxScale{x: font_height, y: font_height});
+            let position = self.grid.position + Vec2::new(self.grid.width / (GRID_SIDE as f32 * 2_f32 ) * index as f32 - label.width(ctx) / 2_f32, self.grid.width + self.grid.scale);
+            graphics::draw(ctx, &label,graphics::DrawParam::default().dest(position))?;
+
+            let label = (TILES_ON_ROW - index - 1).to_string();
+            let mut label = graphics::Text::new(label);
+            label.set_font(graphics::Font::default(), graphics::PxScale{x: font_height, y: font_height});
+            let position = self.grid.position + Vec2::new(- self.grid.scale - label.width(ctx) / 2_f32, self.grid.width / (GRID_SIDE as f32 * 2_f32 ) * index as f32) - label.height(ctx) / 2_f32;
+            graphics::draw(ctx, &label,graphics::DrawParam::default().dest(position))?;
+        }
 
         let mut label = "".to_owned();// format!("{0:?}\n{1:?}\n", self.board_state.top_pawns, self.board_state.bottom_pawns);
         if self.hovered_tile > -1 {
