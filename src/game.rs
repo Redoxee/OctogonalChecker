@@ -1,4 +1,11 @@
-use ggez::{*, graphics::MeshBuilder};
+use ggez::{*,
+     graphics::{
+        self, 
+        MeshBuilder,
+    },
+    Context,
+};
+
 use glam::*;
 
 use crate::shape_style::*;
@@ -7,7 +14,7 @@ use crate::utils::*;
 use crate::grid::*;
 use crate::brain::*;
 
-const MAX_PAWN_NUMBER: usize = 3;
+const MAX_PAWN_NUMBER: usize = 4;
 
 const AI_PAUSE_TIME: f64 = 1_f64;
 
@@ -44,6 +51,7 @@ pub struct BoardState {
 
 pub struct Game {
     game_state : GameState,
+    sprites : graphics::Image,
 }
 
 pub enum GameState {
@@ -245,6 +253,7 @@ impl InGameState {
         game.board_state.add_pawn(TileCoord{x:3, y: 0}, PlayerSide::Top);
         game.board_state.add_pawn(TileCoord{x:4, y: 0}, PlayerSide::Top);
         game.board_state.add_pawn(TileCoord{x:5, y: 0}, PlayerSide::Top);
+        game.board_state.add_pawn(TileCoord{x:4, y: 1}, PlayerSide::Top);
 
         game.board_state.add_pawn(TileCoord{x:3, y: 3}, PlayerSide::Bottom);
         game.board_state.add_pawn(TileCoord{x:4, y: 4}, PlayerSide::Bottom);
@@ -428,8 +437,6 @@ impl ggez::event::EventHandler<GameError> for InGameState {
 
         let label = graphics::Text::new(label);
         graphics::draw(ctx, &label, graphics::DrawParam::default())?;
-
-        graphics::present(ctx)?;
         Ok(())
     }
 }
@@ -447,7 +454,6 @@ impl ggez::event::EventHandler<GameError> for GameOverState {
         self.winner_pawn.draw(mesh_builder, Vec2::new(275., 250.), 20., false);
         let mesh = mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx, &mesh, graphics::DrawParam::default())?;
-        graphics::present(ctx)?;
         Ok(())
     }
 }
@@ -469,12 +475,17 @@ impl ggez::event::EventHandler<GameError> for GameState {
 }
 
 impl Game {
-    pub fn new(grid_position: Vec2) -> Game {
+    pub fn new(ctx: &mut Context, grid_position: Vec2) -> GameResult<Game> {
+        let sprites = match graphics::Image::new(ctx, "/sprites.png") {GameResult::Ok(i)=> i, GameResult::Err(e) => panic!("{}", e)};
 
         let grid = Grid::new(0.3, grid_position, 40., 5.);
         let in_game_state = InGameState::new(grid);
-        let game = Game {game_state: GameState::InGame(in_game_state)};
-        return game;
+        let game = Game {
+            game_state: GameState::InGame(in_game_state),
+            sprites,
+        };
+        
+        return Ok(game);
     }
 }
 
@@ -494,6 +505,14 @@ impl ggez::event::EventHandler<GameError> for Game {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        self.game_state.draw(ctx)
+        
+        self.game_state.draw(ctx)?;
+        
+        let dst = glam::Vec2::new(20.0, 20.0);
+        graphics::draw(ctx, &self.sprites, (dst,))?;
+
+        graphics::present(ctx)?;
+
+        Ok(())
     }
 }
