@@ -6,6 +6,7 @@ mod tiles;
 mod utils;
 mod grid;
 mod brain;
+mod textures;
 mod game;
 use crate::game::*;
 

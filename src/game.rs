@@ -1,9 +1,10 @@
 use ggez::{*,
      graphics::{
         self, 
-        MeshBuilder,
+        MeshBuilder, 
     },
-    Context,
+
+    Context
 };
 
 use glam::*;
@@ -13,6 +14,7 @@ use crate::tiles::*;
 use crate::utils::*;
 use crate::grid::*;
 use crate::brain::*;
+use crate::textures::*;
 
 const MAX_PAWN_NUMBER: usize = 4;
 
@@ -50,8 +52,8 @@ pub struct BoardState {
 }
 
 pub struct Game {
-    game_state : GameState,
-    sprites : graphics::Image,
+    game_state: GameState,
+    game_textures: GameTextures,
 }
 
 pub enum GameState {
@@ -476,13 +478,11 @@ impl ggez::event::EventHandler<GameError> for GameState {
 
 impl Game {
     pub fn new(ctx: &mut Context, grid_position: Vec2) -> GameResult<Game> {
-        let sprites = match graphics::Image::new(ctx, "/sprites.png") {GameResult::Ok(i)=> i, GameResult::Err(e) => panic!("{}", e)};
-
         let grid = Grid::new(0.3, grid_position, 40., 5.);
         let in_game_state = InGameState::new(grid);
         let game = Game {
             game_state: GameState::InGame(in_game_state),
-            sprites,
+            game_textures: GameTextures::new(ctx)?,
         };
         
         return Ok(game);
@@ -508,8 +508,27 @@ impl ggez::event::EventHandler<GameError> for Game {
         
         self.game_state.draw(ctx)?;
         
-        let dst = glam::Vec2::new(20.0, 20.0);
-        graphics::draw(ctx, &self.sprites, (dst,))?;
+        let frame_index = (timer::duration_to_f64(timer::time_since_start(ctx))) as usize % self.game_textures.spear_sprites.len();
+
+        let mut param = graphics::DrawParam {
+            src: self.game_textures.spear_sprites[frame_index],
+            ..Default::default()
+        };
+
+        param.trans = graphics::Transform::Values {
+            dest: mint::Point2 {
+                x: 20_f32,
+                y: 20_f32,
+            },
+            offset: mint::Point2 {
+                x: 0_f32,
+                y: 0_f32,
+            },
+            rotation: 0_f32,
+            scale: mint::Vector2 {x: 4_f32, y: 4_f32},
+        };
+
+        graphics::draw(ctx, &self.game_textures.spritesheet, param)?;
 
         graphics::present(ctx)?;
 
