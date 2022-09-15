@@ -26,8 +26,8 @@ fn main(){
     println!("{:?}", resource_dir);
     
     let mut c = conf::Conf::new();
-    c.window_mode.width = 500_f32;
-    c.window_mode.height = 500_f32;
+    c.window_mode.width = 700_f32;
+    c.window_mode.height = 700_f32;
     let (mut ctx, event_loop) = ContextBuilder::new("OctoChess", "AntonMakesGames").add_resource_path(resource_dir)
     .default_conf(c)
     .window_setup(conf::WindowSetup{
@@ -40,7 +40,7 @@ fn main(){
     .build()
     .unwrap();
     
-    let grid_position = Vec2::new(90., 90.);
+    let grid_position = Vec2::new(120., 120.);
     let game_instance = match Game::new(&mut ctx, grid_position) {Ok(game)=>game, Err(err)=> panic!("{0}", err)};
 
     event::run(ctx, event_loop, game_instance);

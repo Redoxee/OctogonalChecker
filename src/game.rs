@@ -1,7 +1,6 @@
 use ggez::{*,
      graphics::{
         self, 
-        MeshBuilder, 
     },
 
     Context
@@ -51,9 +50,14 @@ pub struct BoardState {
     pub bottom_pawns: PawnArray,
 }
 
+struct DrawingContext {
+    game_textures: GameTextures,
+    time: f64,
+}
+
 pub struct Game {
     game_state: GameState,
-    game_textures: GameTextures,
+    drawing_context: DrawingContext,
 }
 
 pub enum GameState {
@@ -82,27 +86,36 @@ pub struct InGameState {
 }
 
 impl Pawn {
-    fn draw(&self, mesh_builder: &mut MeshBuilder, position: Vec2, scale: f32, is_selected: bool){
-        let primary_color;
-        let mut secondary_color;
-        match self.player {
-            PlayerSide::Bottom => {
-                primary_color = graphics::Color::WHITE;
-                secondary_color = graphics::Color::BLUE;
-            }
+    fn draw(&self, drawing_context: &mut DrawingContext, ctx:&mut ggez::Context, position: Vec2, scale: f32, is_selected: bool){
+        let character = match self.player {PlayerSide::Bottom => &drawing_context.game_textures.spear_sprites, PlayerSide::Top => &drawing_context.game_textures.knight_sprites}; 
+        let sprites = match is_selected { true => &character.sprite_selected, false => &character.sprite};
+        let textures = &sprites.sprites;
+        let frame_index = drawing_context.time as usize % textures.len();
 
-            PlayerSide::Top => {
-                primary_color = graphics::Color::BLUE;
-                secondary_color = graphics::Color::WHITE;
-            }
-        }
+        let mut param = graphics::DrawParam {
+            src: textures[frame_index],
+            ..Default::default()
+        };
 
-        if is_selected {
-            secondary_color = graphics::Color::YELLOW;
-        }
+        let hs = sprites.size;
+        param.trans = graphics::Transform::Values {
+            dest: mint::Point2 {
+                x: position.x - hs.x,
+                y: position.y - hs.y,
+            },
+            offset: mint::Point2 {
+                x: 0_f32,
+                y: 0_f32,
+            },
+            rotation: 0_f32,
+            scale: mint::Vector2 {x: scale, y: scale},
+        };
 
-        mesh_builder.circle(graphics::DrawMode::Fill(graphics::FillOptions::default()), position, scale, 0.1, primary_color).unwrap();
-        mesh_builder.circle(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(3.)), position, scale, 0.1, secondary_color).unwrap();
+        match graphics::draw(ctx, &drawing_context.game_textures.spritesheet, param)
+        {
+            GameResult::Err(e) => panic!("{}",e),
+            GameResult::Ok(_) => (),
+        };
     }
 }
 
@@ -279,7 +292,7 @@ impl InGameState {
     }
 }
 
-impl ggez::event::EventHandler<GameError> for InGameState {
+impl InGameState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse_position = input::mouse::position(ctx);
         let mouse_position = Vec2::new(mouse_position.x, mouse_position.y);
@@ -376,10 +389,10 @@ impl ggez::event::EventHandler<GameError> for InGameState {
         Ok(())
     }
 
-    fn draw(&mut self, ctx: &mut Context) -> GameResult {
+    fn draw(&mut self, ctx: &mut Context, drawing_context: &mut DrawingContext) -> GameResult {
         graphics::clear(ctx, graphics::Color::BLACK);
 
-        let mesh_builder = &mut graphics::MeshBuilder::new();
+        let mut mesh_builder = graphics::MeshBuilder::new();
         for index in 0..self.grid.tiles.len()
         {
             let tile = &self.grid.tiles[index];
@@ -396,25 +409,22 @@ impl ggez::event::EventHandler<GameError> for InGameState {
                 style = ShapeStyle::Highlight;
             }
 
-            tile.build_mesh(style ,mesh_builder);
+            tile.build_mesh(style, &mut mesh_builder);
         }
 
-        for index in 0..NUMBER_OF_TILES {
-            if let Some(pawn) = self.board_state.tiles[index] {
-                pawn.draw(mesh_builder, self.grid.tiles[index].position(), self.grid.scale * 0.4, self.selected_pawn == index as isize);
-            }
-        }
-        
         let mesh = mesh_builder.build(ctx).unwrap();
         graphics::draw(ctx, &mesh, graphics::DrawParam::default().dest(self.grid.position))?; 
 
+        for index in 0..NUMBER_OF_TILES {
+            if let Some(pawn) = self.board_state.tiles[index] {
+                pawn.draw(drawing_context, ctx, self.grid.tiles[index].position() + self.grid.position, 2_f32, self.selected_pawn == index as isize);
+            }
+        }
+
         let label = graphics::Text::new("Current player : ");
         graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + Vec2::new(self.grid.width / 2. - label.width(ctx), -65.))).unwrap();
-        let mesh_builder = &mut graphics::MeshBuilder::new();
         let current_pawn = match self.board_state.current_player {PlayerSide::Bottom => self.bottom_player_pawn, PlayerSide::Top => self.top_player_pawn};
-        current_pawn.draw(mesh_builder, self.grid.position + Vec2::new(self.grid.width / 2. + 15., -60.), self.grid.scale * 0.4, false);
-        let mesh =  mesh_builder.build(ctx).unwrap();
-        graphics::draw(ctx,&mesh, graphics::DrawParam::default()).unwrap();
+        current_pawn.draw(drawing_context, ctx, self.grid.position + Vec2::new(self.grid.width / 2. + 16_f32, -65.), 2_f32, false);
 
         let font_height = 24_f32;
         for index in 0..TILES_ON_ROW {
@@ -431,7 +441,7 @@ impl ggez::event::EventHandler<GameError> for InGameState {
             graphics::draw(ctx, &label,graphics::DrawParam::default().dest(position))?;
         }
 
-        let mut label = "".to_owned();// format!("{0:?}\n{1:?}\n", self.board_state.top_pawns, self.board_state.bottom_pawns);
+        let mut label = "".to_owned();
         if self.hovered_tile > -1 {
             let coord = Grid::get_coord_from_index(self.hovered_tile as usize);
             label.push_str(&format!("[{},{}] = {}", coord.x, coord.y, self.hovered_tile));
@@ -443,24 +453,21 @@ impl ggez::event::EventHandler<GameError> for InGameState {
     }
 }
 
-impl ggez::event::EventHandler<GameError> for GameOverState {
+impl GameOverState {
     fn update(&mut self, _ctx: &mut Context) -> Result<(), GameError> {
         Ok(())
     }
 
-    fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+    fn draw(&mut self, ctx: &mut Context, drawing_context: &mut DrawingContext) -> Result<(), GameError> {
         graphics::clear(ctx, graphics::Color::BLACK);
         let winning_label = graphics::Text::new("Winner :");
-        graphics::draw(ctx, &winning_label, graphics::DrawParam::default().dest(Vec2::new(250. - winning_label.width(ctx), 250. - winning_label.height(ctx) / 2.)))?;
-        let mesh_builder =  &mut graphics::MeshBuilder::new();
-        self.winner_pawn.draw(mesh_builder, Vec2::new(275., 250.), 20., false);
-        let mesh = mesh_builder.build(ctx).unwrap();
-        graphics::draw(ctx, &mesh, graphics::DrawParam::default())?;
+        graphics::draw(ctx, &winning_label, graphics::DrawParam::default().dest(Vec2::new(350. - winning_label.width(ctx), 350. - winning_label.height(ctx) / 2.)))?;
+        self.winner_pawn.draw(drawing_context, ctx, Vec2::new(375., 350.), 2., false);
         Ok(())
     }
 }
 
-impl ggez::event::EventHandler<GameError> for GameState {
+impl GameState {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         match self {
             GameState::InGame(state) => state.update(ctx),
@@ -468,21 +475,24 @@ impl ggez::event::EventHandler<GameError> for GameState {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+    fn draw(&mut self, ctx: &mut Context, drawing_context: &mut DrawingContext) -> Result<(), GameError> {
         match self {
-            GameState::InGame(state) => state.draw(ctx),
-            GameState::GameOver(state) => state.draw(ctx),
+            GameState::InGame(state) => state.draw(ctx, drawing_context),
+            GameState::GameOver(state) => state.draw(ctx, drawing_context),
         }
     }
 }
 
 impl Game {
     pub fn new(ctx: &mut Context, grid_position: Vec2) -> GameResult<Game> {
-        let grid = Grid::new(0.3, grid_position, 40., 5.);
+        let grid = Grid::new(0.3, grid_position, 60., 5.);
         let in_game_state = InGameState::new(grid);
         let game = Game {
             game_state: GameState::InGame(in_game_state),
-            game_textures: GameTextures::new(ctx)?,
+            drawing_context: DrawingContext { 
+                game_textures: GameTextures::new(ctx)?, 
+                time: timer::duration_to_f64(timer::time_since_start(ctx)),
+            }
         };
         
         return Ok(game);
@@ -505,30 +515,8 @@ impl ggez::event::EventHandler<GameError> for Game {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        
-        self.game_state.draw(ctx)?;
-        
-        let frame_index = (timer::duration_to_f64(timer::time_since_start(ctx))) as usize % self.game_textures.spear_sprites.len();
-
-        let mut param = graphics::DrawParam {
-            src: self.game_textures.spear_sprites[frame_index],
-            ..Default::default()
-        };
-
-        param.trans = graphics::Transform::Values {
-            dest: mint::Point2 {
-                x: 20_f32,
-                y: 20_f32,
-            },
-            offset: mint::Point2 {
-                x: 0_f32,
-                y: 0_f32,
-            },
-            rotation: 0_f32,
-            scale: mint::Vector2 {x: 4_f32, y: 4_f32},
-        };
-
-        graphics::draw(ctx, &self.game_textures.spritesheet, param)?;
+        self.drawing_context.time = timer::duration_to_f64(timer::time_since_start(ctx));
+        self.game_state.draw(ctx, &mut self.drawing_context)?;
 
         graphics::present(ctx)?;
 
