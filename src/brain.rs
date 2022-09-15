@@ -35,6 +35,7 @@ impl Brain {
         for _ in 0..layer {
             let plays = Brain::find_all_plays(&current_board, current_board.current_player);
             if plays.len() == 0 {
+                result = result + layer as i32;
                 break;
             }
 
@@ -112,7 +113,7 @@ impl Brain {
                             score = score + 10;
                         }
                         else {
-                            score = score - 20;
+                            score = score - 100;
                         }
                     }
                 }
