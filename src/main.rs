@@ -1,13 +1,19 @@
 use ggez::{*};
 use glam::*;
 
+mod board;
+mod pawn;
 mod shape_style;
 mod tiles;
 mod utils;
 mod grid;
 mod brain;
 mod textures;
+
+mod game_states;
 mod game;
+mod ui;
+
 use crate::game::*;
 
 use std::{env, path};

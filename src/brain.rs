@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use crate::game::*;
 use crate::grid::*;
+use crate::board::*;
 
 pub struct Brain {
 }

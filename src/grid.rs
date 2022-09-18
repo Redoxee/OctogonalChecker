@@ -10,6 +10,8 @@ pub const TILES_ON_SIDE: usize = GRID_SIDE * 2 + 1;
 pub const TILES_ON_ROW: usize = TILES_ON_SIDE;
 pub const TILES_ON_COL: usize = GRID_SIDE + 1;
 
+
+#[derive(Clone, Copy)]
 pub struct BoundingBox{
     x: f32,
     right: f32,
@@ -54,6 +56,8 @@ impl std::fmt::Display for TileCoord {
     }
 }
 
+
+#[derive(Clone, Copy)]
 pub struct Grid {
     pub tiles: [GridTile; NUMBER_OF_TILES],
     pub position: Vec2,
