@@ -231,9 +231,9 @@ impl InGameState {
         }
 
         let label = graphics::Text::new("Current player : ");
-        graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + Vec2::new(self.grid.width / 2. - label.width(ctx), -65.))).unwrap();
+        graphics::draw(ctx, &label, graphics::DrawParam::default().dest(self.grid.position + Vec2::new(self.grid.width / 2. - label.width(ctx), -85.))).unwrap();
         let current_pawn = match self.board_state.current_player {PlayerSide::Bottom => self.bottom_player_pawn, PlayerSide::Top => self.top_player_pawn};
-        current_pawn.draw(drawing_context, ctx, self.grid.position + Vec2::new(self.grid.width / 2. + 16_f32, -65.), 2_f32, false);
+        current_pawn.draw(drawing_context, ctx, self.grid.position + Vec2::new(self.grid.width / 2. + 16_f32, -85.), 2_f32, false);
 
         let font_height = 24_f32;
         for index in 0..TILES_ON_ROW {
