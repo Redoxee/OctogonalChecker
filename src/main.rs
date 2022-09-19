@@ -1,5 +1,4 @@
 use ggez::{*};
-use glam::*;
 
 mod board;
 mod pawn;
@@ -46,8 +45,7 @@ fn main(){
     .build()
     .unwrap();
     
-    let grid_position = Vec2::new(120., 120.);
-    let game_instance = match Game::new(&mut ctx, grid_position) {Ok(game)=>game, Err(err)=> panic!("{0}", err)};
+    let game_instance = match Game::new(&mut ctx) {Ok(game)=>game, Err(err)=> panic!("{0}", err)};
 
     event::run(ctx, event_loop, game_instance);
 }

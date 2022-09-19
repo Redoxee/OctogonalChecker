@@ -42,7 +42,10 @@ pub enum InGameResult {
 }
 
 impl InGameState {
-    pub fn new(grid : Grid, player_option: PlayerOption) -> InGameState{
+    pub fn new(player_option: PlayerOption) -> InGameState{
+        
+        let grid_position = Vec2::new(120., 120.);
+        let grid = Grid::new(0.3, grid_position, 60., 5.);
         let mut game = InGameState{
             grid,
             player_option,

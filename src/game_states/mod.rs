@@ -8,7 +8,7 @@ use menu_state::*;
 use in_game_state::*;
 use game_over_state::*;
 
-use crate::{game, grid::Grid};
+use crate::{game};
 
 pub enum GameState {
     MenuState(MenuState),
@@ -22,7 +22,7 @@ pub enum GameStateResult {
 }
 
 impl GameState {
-    pub fn update(&mut self, ctx: &mut ggez::Context, grid: &Grid) -> Result<GameStateResult, ggez::GameError> {
+    pub fn update(&mut self, ctx: &mut ggez::Context) -> Result<GameStateResult, ggez::GameError> {
         match self {
             GameState::MenuState(state) => match state.update(ctx) {
                 Ok(option) => {
@@ -31,10 +31,10 @@ impl GameState {
                             Ok(GameStateResult::None)
                         },
                         MenuOption::OnePlayer => {
-                            Ok(GameStateResult::NextState(GameState::InGame(InGameState::new(*grid, PlayerOption::OnePlayer))))
+                            Ok(GameStateResult::NextState(GameState::InGame(InGameState::new(PlayerOption::OnePlayer))))
                         },
                         MenuOption::TwoPlayer => {
-                            Ok(GameStateResult::NextState(GameState::InGame(InGameState::new(*grid, PlayerOption::TwoPlayer))))
+                            Ok(GameStateResult::NextState(GameState::InGame(InGameState::new(PlayerOption::TwoPlayer))))
                         }
                     }
                 }

@@ -5,7 +5,6 @@ use ggez::{*,
 
 use glam::*;
 
-use crate::grid::*;
 use crate::textures::*;
 use crate::game_states::{
     *,
@@ -30,7 +29,6 @@ pub struct DrawingContext {
 
 pub struct Game {
     game_state: GameState,
-    grid: Grid,
     drawing_context: DrawingContext,
 }
 
@@ -44,11 +42,9 @@ impl PlayerSide {
 }
 
 impl Game {
-    pub fn new(ctx: &mut Context, grid_position: Vec2) -> GameResult<Game> {
-        let grid = Grid::new(0.3, grid_position, 60., 5.);
+    pub fn new(ctx: &mut Context) -> GameResult<Game> {
         let game = Game {
-            game_state: GameState::MenuState(MenuState::new()),
-            grid,
+            game_state: GameState::MenuState(MenuState::new(ctx)),
             drawing_context: DrawingContext { 
                 game_textures: GameTextures::new(ctx)?, 
                 time: timer::duration_to_f64(timer::time_since_start(ctx)),
@@ -61,7 +57,7 @@ impl Game {
 
 impl ggez::event::EventHandler<GameError> for Game {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        match self.game_state.update(ctx, &self.grid) {
+        match self.game_state.update(ctx) {
             Ok(instruction) => match instruction {
                 GameStateResult::None => {
                     return Result::Ok(());
