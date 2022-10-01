@@ -1,4 +1,5 @@
-use ggez::{*};
+
+extern crate good_web_game as ggez;
 
 mod board;
 mod pawn;
@@ -30,22 +31,14 @@ fn main(){
 
     println!("{:?}", resource_dir);
     
-    let mut c = conf::Conf::new();
-    c.window_mode.width = 700_f32;
-    c.window_mode.height = 700_f32;
-    let (mut ctx, event_loop) = ContextBuilder::new("OctoChess", "AntonMakesGames").add_resource_path(resource_dir)
-    .default_conf(c)
-    .window_setup(conf::WindowSetup{
-        title:String::from("Octogonal chess"),
-        samples: conf::NumSamples::One,
-        vsync: true,
-        srgb: true,
-        icon:"".to_owned(),
-    })
-    .build()
-    .unwrap();
-    
-    let game_instance = match Game::new(&mut ctx) {Ok(game)=>game, Err(err)=> panic!("{0}", err)};
-
-    event::run(ctx, event_loop, game_instance);
+    ggez::start(
+        ggez::conf::Conf::default()
+            .cache(Some(include_bytes!("resources.tar")))
+            .physical_root_dir(Some(resource_dir))
+            .window_width(750)
+            .window_height(750)
+            .window_title("Octogonal Chess".to_owned()),
+            //.sample_count(16),
+        |mut context| Box::new(Game::new(&mut context).unwrap()),
+    );
 }
