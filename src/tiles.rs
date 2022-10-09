@@ -1,8 +1,11 @@
-use ggez::{*, graphics::MeshBuilder};
 use glam::*;
 
 use crate::shape_style::*;
-use crate::utils::*;
+
+pub trait Shape {
+    fn contain_position(&self, position: &Vec2) -> bool;
+    fn position(&self) -> Vec2;
+}
 
 #[derive(Clone, Copy)]
 pub struct OctoTile {
@@ -81,24 +84,6 @@ impl QuadTile {
 }
 
 impl Shape for OctoTile{
-    fn build_mesh(&self, style: ShapeStyle,mesh_builder: &mut MeshBuilder) {
-        let color = match style {
-            ShapeStyle::Base => graphics::Color::new(0.6, 0.6, 0.6, 1_f32),
-            ShapeStyle::Highlight => graphics::Color::new(0.3, 0.4, 0.5, 1_f32),
-            ShapeStyle::Hovered => graphics::Color::new(0.8, 0.8, 0.8, 1_f32),
-            ShapeStyle::Press => graphics::Color::new(0.9, 0.9, 0.9, 1_f32),
-        };
-        
-        mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &self.inner_verts.to_vec(), color).unwrap();
-
-        match style {
-            ShapeStyle::Highlight => {
-                mesh_builder.polygon(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(2.)), &self.verts.to_vec(), graphics::Color::YELLOW).unwrap();
-            },
-            _=> {},
-        }
-    }
-
     fn contain_position(&self, position: &Vec2) -> bool{
         return position_in_poly(&self.verts, position)
     }
@@ -109,23 +94,6 @@ impl Shape for OctoTile{
 }
 
 impl Shape for QuadTile{
-    fn build_mesh(&self, style: ShapeStyle,mesh_builder: &mut MeshBuilder) {
-        let color = match style {
-            ShapeStyle::Base => graphics::Color::new(0.7, 0., 0., 1_f32),
-            ShapeStyle::Highlight => graphics::Color::new(0.1, 0., 0.3, 1_f32),
-            ShapeStyle::Hovered => graphics::Color::new(0.8, 0.3, 0.3, 1_f32),
-            ShapeStyle::Press => graphics::Color::new(0.9, 0.5, 0.5, 1_f32),
-        };
-        
-        mesh_builder.polygon(graphics::DrawMode::Fill(graphics::FillOptions::default()), &self.inner_verts.to_vec(), color).unwrap();
-        match style {
-            ShapeStyle::Highlight => {
-                mesh_builder.polygon(graphics::DrawMode::Stroke(graphics::StrokeOptions::default().with_line_width(2.)), &self.verts.to_vec(), graphics::Color::YELLOW).unwrap();
-            },
-            _=> {},
-        }
-    }
-
     fn contain_position(&self, position: &Vec2) -> bool{
         return position_in_poly(&self.verts, position)
     }
@@ -164,14 +132,6 @@ pub enum TileShape {
 }
 
 impl Shape for GridTile {
-    fn build_mesh(&self, style: ShapeStyle,mesh_builder: &mut MeshBuilder) {
-        match self {
-            GridTile::Quad(inner_tile) => inner_tile.build_mesh(style, mesh_builder),
-            GridTile::Octo(inner_tile) => inner_tile.build_mesh(style, mesh_builder),
-            GridTile::None => panic!()
-        }
-    }
-
     fn contain_position(&self, position: &Vec2) -> bool {
         match self {
             GridTile::Quad(inner_tile) => inner_tile.contain_position(position),

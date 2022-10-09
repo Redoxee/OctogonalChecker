@@ -2,7 +2,6 @@ use::std::ops;
 
 use glam::*;
 use crate::tiles::*;
-use crate::utils::*;
 
 pub const GRID_SIDE: usize = 4;
 pub const NUMBER_OF_TILES: usize = (GRID_SIDE * 2 + 1)  * GRID_SIDE + GRID_SIDE + 1;
