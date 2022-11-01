@@ -1,4 +1,4 @@
-use glam::*;
+use bevy::{prelude::*};
 
 use crate::shape_style::*;
 
@@ -19,6 +19,11 @@ pub struct QuadTile {
     pub verts : [Vec2; 4],
     pub inner_verts : [Vec2; 4],
     pub position : Vec2,
+}
+
+pub enum TileShape {
+    Quad,
+    Octo,
 }
 
 impl OctoTile {
@@ -124,11 +129,6 @@ pub enum GridTile {
     Quad(QuadTile),
     Octo(OctoTile),
     None,
-}
-
-pub enum TileShape {
-    Quad,
-    Octo,
 }
 
 impl Shape for GridTile {

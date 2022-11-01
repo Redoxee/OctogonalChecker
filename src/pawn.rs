@@ -1,4 +1,4 @@
-use glam::Vec2;
+use bevy::{prelude::*};
 
 use crate::game::*;
 

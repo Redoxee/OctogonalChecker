@@ -1,6 +1,6 @@
 use::std::ops;
 
-use glam::*;
+use bevy::{prelude::*};
 use crate::tiles::*;
 
 pub const GRID_SIDE: usize = 4;

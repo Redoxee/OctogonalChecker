@@ -1,4 +1,4 @@
-use glam::*;
+use bevy::{prelude::*};
 
 pub const MAX_PAWN_NUMBER: usize = 4;
 pub const AI_PAUSE_TIME: f64 = 0.5_f64;
