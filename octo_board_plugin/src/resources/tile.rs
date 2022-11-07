@@ -1,8 +1,8 @@
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Tile {
-    Octo,
-    Quad,
+    Octo(usize, usize),
+    Quad(usize, usize),
 }
 
 impl Tile {
@@ -11,8 +11,8 @@ impl Tile {
         format!(
             "{}",
             match self {
-                Tile::Octo => "octo",
-                Tile::Quad => "quad",
+                Tile::Octo(_, _) => "octo",
+                Tile::Quad(_, _) => "quad",
             }
         )
     }

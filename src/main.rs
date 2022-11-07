@@ -5,7 +5,7 @@ use bevy::{
 use octo_board_plugin::game_plugin::GamePlugin;
 
 #[cfg(feature = "debug")]
-use bevy_inspector_egui::WorldInspectorPlugin;
+use bevy_inspector_egui::{WorldInspectorPlugin};
 
 fn main() {
     let mut app = App::new();
@@ -20,7 +20,9 @@ fn main() {
     .add_plugins(DefaultPlugins);
     #[cfg(feature = "debug")]
     // Debug hierarchy inspector
-    app.add_plugin(WorldInspectorPlugin::new());
+    {
+        app.add_plugin(WorldInspectorPlugin::new());
+    }
     // Startup system (cameras)
     app.add_startup_system(camera_setup);
     // Run the app

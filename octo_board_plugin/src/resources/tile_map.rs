@@ -4,31 +4,25 @@ use std::ops::{Deref, DerefMut};
 /// Base tile map
 #[derive(Debug, Clone)]
 pub struct TileMap {
-    width: u16,
-    height: u16,
-    map: Vec<Tile>,
+    pub map: Vec<Tile>,
+    pub octogon_on_side: usize,
 }
 
 impl TileMap {
-    pub fn create(width: u16, height: u16) -> Self {
+    pub fn create(octogon_on_side: usize) -> Self {
         let mut map = Vec::new();
-        for _y in 0..(height - 1) {
-            for _x in 0..(width - 1) {
-                map.push(Tile::Quad);
-                map.push(Tile::Octo);
+        for y in 0..(octogon_on_side + 1) {
+            for x in 0..(octogon_on_side + 1) {
+                map.push(Tile::Quad(x * 2, y * 2));
+                if x < octogon_on_side && y < octogon_on_side {
+                    map.push(Tile::Octo(x * 2 + 1, y * 2 + 1));
+                }
             }
-
-            map.push(Tile::Quad);
-        }
-
-        for _x in 0..width {
-            map.push(Tile::Quad);
         }
 
         Self {
-            width,
-            height,
             map,
+            octogon_on_side
         }
     }
 

@@ -5,6 +5,10 @@ use bevy::{prelude::*,
     render::camera::RenderTarget,
 };
 
+use bevy_inspector_egui::RegisterInspectable;
+
+use crate::resources::tile_map::*;
+use crate::resources::tile::*;
 use crate::components::tile_coord::*;
 use crate::components::shape::*;
 
@@ -93,33 +97,36 @@ fn spawn_tiles(
     let octo_ratio = 0.25;
     let gap = 4.;
 
-    let half_tile_gap = tile_scale / 2. ;
-    let tile_gap = half_tile_gap * 2.;
-    for y_index in 0..=GRID_SIDE {
-        for x_index in 0..=GRID_SIDE {
-            let bundle = MaterialMesh2dBundle {
-                mesh: meshes.add(create_quad(octo_ratio, tile_scale, gap).into()).into(),
-                material: materials.add(ColorMaterial::from(Color::RED)),
-                transform: Transform::from_xyz(x_index as f32 * tile_gap, y_index as f32* tile_gap, 0.0),
-                ..default()};
+    let tile_gap = tile_scale / 2.;
+    let tile_map = TileMap::create(OCTO_ON_SIDE);
+    for tile in tile_map.map {
+        match tile {
+            Tile::Quad(x, y) => {
+                let bundle = MaterialMesh2dBundle {
+                    mesh: meshes.add(create_quad(octo_ratio, tile_scale, gap).into()).into(),
+                    material: materials.add(ColorMaterial::from(Color::RED)),
+                    transform: Transform::from_xyz(x as f32 * tile_gap, y as f32* tile_gap, 0.0),
+                    ..default()};
+    
+                let coord = TileCoord{x : x as i32 , y: y as i32};
+                commands.spawn_bundle(bundle)
+                    .insert(coord)
+                    .insert(Shape::Quad)
+                    .insert(Name::new(format!("Quad ({})", coord)));
+            },
 
-            commands.spawn_bundle(bundle)
-                .insert(TileCoord{x : x_index as i32, y: y_index as i32})
-                .insert(Shape::Quad)
-                .insert(Name::new("Quad"));
-
-
-            if x_index < GRID_SIDE && y_index < GRID_SIDE {
+            Tile::Octo(x, y) => {
                 let bundle = MaterialMesh2dBundle {
                     mesh: meshes.add(create_octogone(octo_ratio, tile_scale, gap).into()).into(),
                     material: materials.add(ColorMaterial::from(Color::GRAY)),
-                    transform: Transform::from_xyz(x_index as f32 * tile_gap + half_tile_gap, y_index as f32 * tile_gap + half_tile_gap, 0.0),
+                    transform: Transform::from_xyz(x as f32 * tile_gap, y as f32 * tile_gap, 0.0),
                     ..default()};
     
+                let coord = TileCoord{x : x as i32, y: y as i32};
                 commands.spawn_bundle(bundle)
-                    .insert(TileCoord{x : x_index as i32, y: y_index as i32})
+                    .insert(coord)
                     .insert(Shape::Octo)
-                    .insert(Name::new("Octo"));
+                    .insert(Name::new(format!("Octo ({})", coord)));
             }
         }
     }
@@ -181,5 +188,10 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(spawn_tiles);
         app.add_system(my_cursor_system);
+        #[cfg(feature = "debug")]
+        {
+            app.register_inspectable::<TileCoord>()
+                .register_inspectable::<Shape>();
+        }
     }
 }
