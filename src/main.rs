@@ -2,7 +2,9 @@ use bevy::{
     prelude::*, 
     core_pipeline::clear_color::ClearColorConfig, 
 };
+
 use octo_board_plugin::game_plugin::GamePlugin;
+use bevy_mod_picking::*;
 
 #[cfg(feature = "debug")]
 use bevy_inspector_egui::{WorldInspectorPlugin};
@@ -17,7 +19,9 @@ fn main() {
         ..Default::default()
     })
     // Bevy default plugins
-    .add_plugins(DefaultPlugins);
+    .add_plugins(DefaultPlugins)
+    .add_plugins(DefaultPickingPlugins);
+    
     #[cfg(feature = "debug")]
     // Debug hierarchy inspector
     {
@@ -36,5 +40,6 @@ fn camera_setup(mut commands: Commands) {
     let mut camera = Camera2dBundle::default();
     camera.camera_2d.clear_color =  ClearColorConfig::Custom(Color::BLACK);
     
-    commands.spawn_bundle(camera);
+    commands.spawn_bundle(camera)
+    .insert_bundle(PickingCameraBundle::default());
 }

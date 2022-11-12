@@ -41,6 +41,7 @@ impl Display for TileCoord {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_index_from_coord(coord: TileCoord) -> Option<usize> {
     let width = TILES_ON_ROW as i32;
     let height = TILES_ON_COL as i32;
@@ -56,6 +57,7 @@ pub fn get_index_from_coord(coord: TileCoord) -> Option<usize> {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_index_from_coord_unsafe(coord: TileCoord) -> usize {
     let width = TILES_ON_ROW as i32;
     let height = TILES_ON_COL as i32;
@@ -69,6 +71,7 @@ pub fn get_index_from_coord_unsafe(coord: TileCoord) -> usize {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_coord_from_index(index : usize) -> TileCoord {
     let index = index as i32;
     let width = TILES_ON_ROW as i32;
@@ -91,6 +94,7 @@ pub fn get_tile_shape(coord: TileCoord) -> Shape {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_tile_shape_from_index(tile_index: usize) -> Shape {
     if tile_index % TILES_ON_ROW % 2 == 0 {
         return Shape::Quad;

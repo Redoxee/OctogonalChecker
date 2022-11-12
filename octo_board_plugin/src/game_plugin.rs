@@ -1,16 +1,25 @@
 use bevy::{prelude::*,  
     sprite::MaterialMesh2dBundle, 
-    sprite::Mesh2dHandle,
     render::mesh::*,
     render::camera::RenderTarget,
 };
 
+use bevy_mod_picking::*;
+
+#[cfg(feature = "debug")]
 use bevy_inspector_egui::RegisterInspectable;
 
-use crate::resources::tile_map::*;
-use crate::resources::tile::*;
-use crate::components::tile_coord::*;
-use crate::components::shape::*;
+use crate::{
+    resources::{
+        tile_map::*,
+        tile::*,
+    },
+    components::{
+        tile_coord::*,
+        shape::*,
+        pawn::*,
+    }
+};
 
 pub const OCTO_ON_SIDE: usize = 4;
 pub const QUAD_ON_SIDE: usize = OCTO_ON_SIDE + 1;
@@ -110,6 +119,7 @@ fn spawn_tiles(
     
                 let coord = TileCoord{x : x as i32 , y: y as i32};
                 commands.spawn_bundle(bundle)
+                    .insert_bundle(PickableBundle::default())
                     .insert(coord)
                     .insert(Shape::Quad)
                     .insert(Name::new(format!("Quad ({})", coord)));
@@ -124,6 +134,7 @@ fn spawn_tiles(
     
                 let coord = TileCoord{x : x as i32, y: y as i32};
                 commands.spawn_bundle(bundle)
+                    .insert_bundle(PickableBundle::default())
                     .insert(coord)
                     .insert(Shape::Octo)
                     .insert(Name::new(format!("Octo ({})", coord)));
@@ -132,19 +143,30 @@ fn spawn_tiles(
     }
 }
 
-fn test_move(windows: Res<Windows>, mut transforms: Query<(&mut Transform, &mut Mesh2dHandle)>) {
-    
-    let window = windows.get_primary().unwrap();
-    let position = window.cursor_position();
-    if let Some(pos) = position {
-        let pos = Vec3::new(pos.x, pos.y, 0_f32);
-        for (mut transform, _) in &mut transforms {
-            let dir = pos - transform.translation;
-            transform.translation += dir * 0.15_f32;
+fn spawn_pawns(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>)
+{
+    commands.spawn().insert(Pawn::Top(Some(TileCoord{x: 3, y: 0}))).insert(Name::new("Top"));
+    commands.spawn().insert(Pawn::Top(Some(TileCoord{x: 4, y: 1}))).insert(Name::new("Top"));
+    commands.spawn().insert(Pawn::Top(Some(TileCoord{x: 5, y: 0}))).insert(Name::new("Top"));
+}
+
+#[derive(Default)]
+struct SelectedTile {
+    pub entity : Option<Entity>
+}
+
+pub fn input_system(mut events: EventReader<PickingEvent>) {
+    for event in events.iter() {
+        match event {
+            PickingEvent::Selection(e) => info!("A selection event happened: {:?}", e),
+            PickingEvent::Hover(e) => info!("Egads! A hover event!? {:?}", e),
+            PickingEvent::Clicked(e) => info!("Gee Willikers, it's a click! {:?}", e),
         }
     }
 }
-
 
 fn my_cursor_system(
     // need to get window dimensions
@@ -186,8 +208,11 @@ fn my_cursor_system(
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(spawn_tiles);
-        app.add_system(my_cursor_system);
+        app.add_startup_system(spawn_tiles)
+        .add_startup_system(spawn_pawns);
+        
+        app.add_system_to_stage(CoreStage::PostUpdate, input_system);
+        
         #[cfg(feature = "debug")]
         {
             app.register_inspectable::<TileCoord>()

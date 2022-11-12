@@ -7,12 +7,13 @@ pub enum Tile {
 
 impl Tile {
     #[cfg(feature = "debug")]
+    #[allow(dead_code)]
     pub fn console_output(&self) -> String {
         format!(
             "{}",
             match self {
-                Tile::Octo(_, _) => "octo",
-                Tile::Quad(_, _) => "quad",
+                Tile::Octo(x, y) => format!("Octo({x},{y})"),
+                Tile::Quad(x, y) => format!("Quad({x},{y})"),
             }
         )
     }

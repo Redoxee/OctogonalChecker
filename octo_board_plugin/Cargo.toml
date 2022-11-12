@@ -20,3 +20,5 @@ random = "0.12.2"
 # Hierarchy inspector debug
 bevy-inspector-egui = { version = "0.13.0", optional = true }
 
+bevy_mod_picking = "0.9.0"
+
