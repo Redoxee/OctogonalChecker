@@ -19,8 +19,7 @@ fn main() {
         ..Default::default()
     })
     // Bevy default plugins
-    .add_plugins(DefaultPlugins)
-    .add_plugins(DefaultPickingPlugins);
+    .add_plugins(DefaultPlugins);
     
     #[cfg(feature = "debug")]
     // Debug hierarchy inspector
