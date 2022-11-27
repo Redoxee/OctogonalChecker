@@ -17,8 +17,13 @@
 				"$rustc"
 			],
 			"args": ["--features", "debug"],
-			"group": "build",
-			"label": "rust: run debug"
+			"label": "rust: run debug",
+			
+      		// Mark as the default build task so cmd/ctrl+shift+b will create them
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
 		}
 	]
 }
