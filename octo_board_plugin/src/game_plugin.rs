@@ -150,10 +150,10 @@ fn spawn_tiles (
                 transform: tile_transform,
                 ..default()};
     
-            commands.spawn_bundle(bundle)
+            commands.spawn(bundle)
             .insert(shape)
             .insert(coord)
-            .insert_bundle(PickableBundle::default())
+            .insert(PickableBundle::default())
             .insert(Name::new(format!("{} ({})", shape, coord)));
         }
 }
@@ -164,34 +164,39 @@ fn spawn_pawns (
     materials: &mut ResMut<Assets<ColorMaterial>>,
     parameters: &StartupParameters)
 {
-    spawn_pawn(commands, meshes, materials, Pawn::Bottom(Some(TileCoord {x: 3 , y: 1})), &parameters);
-    spawn_pawn(commands, meshes, materials, Pawn::Bottom(Some(TileCoord {x: 4 , y: 2})), &parameters);
-    spawn_pawn(commands, meshes, materials, Pawn::Bottom(Some(TileCoord {x: 5 , y: 1})), &parameters);
+    spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 3 , y: 1}, &parameters);
+    spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 4 , y: 2}, &parameters);
+    spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 5 , y: 1}, &parameters);
+    
+    spawn_pawn(commands, meshes, materials, PlayerSide::Top, TileCoord {x: 3 , y: 7}, &parameters);
+    spawn_pawn(commands, meshes, materials, PlayerSide::Top, TileCoord {x: 4 , y: 6}, &parameters);
+    spawn_pawn(commands, meshes, materials, PlayerSide::Top, TileCoord {x: 5 , y: 7}, &parameters);
 }
 
 fn spawn_pawn (
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
-    pawn: Pawn,
+    player_side: PlayerSide,
+    tile_coord: TileCoord,
     parameters : &StartupParameters)
 {
-    let (coord, label) = match pawn {
-        Pawn::Top(Some(coord)) => (coord, "Top"),
-        Pawn::Bottom(Some(coord)) => (coord, "Bottom"),
-        _=> panic!()
+
+    let label = match player_side {
+        PlayerSide::Top => "Top",
+        PlayerSide::Bottom => "Bottom",
     };
 
     let factor = parameters.tile_gap;
-    let position = Vec3::new(coord.x as f32 * factor, coord.y as f32 * factor, 1_f32);
+    let position = Vec3::new(tile_coord.x as f32 * factor, tile_coord.y as f32 * factor, 1_f32);
 
-    commands.spawn_bundle(MaterialMesh2dBundle {
+    commands.spawn(MaterialMesh2dBundle {
             mesh: meshes.add(shape::RegularPolygon::new(1_f32, 32).into()).into(),
             transform: Transform::default().with_translation(position).with_scale(Vec3::splat(16.)),
             material: materials.add(ColorMaterial::from(Color::BLUE)),
             ..Default::default()
         })
-        .insert(pawn)
+        .insert(Pawn{player_side, position: Some(tile_coord)})
         .insert(Name::new(label));
 
 }

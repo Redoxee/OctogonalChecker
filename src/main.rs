@@ -11,15 +11,15 @@ use bevy_inspector_egui::{WorldInspectorPlugin};
 
 fn main() {
     let mut app = App::new();
-    // Window setup
-    app.insert_resource(WindowDescriptor {
+    let window_descriptor = WindowDescriptor {
         title: "Octochess!".to_string(),
         width: 700.,
         height: 800.,
-        ..Default::default()
-    })
+        ..default()
+    };
+
     // Bevy default plugins
-    .add_plugins(DefaultPlugins);
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {window: window_descriptor, ..default()}));
     
     #[cfg(feature = "debug")]
     // Debug hierarchy inspector
@@ -39,6 +39,6 @@ fn camera_setup(mut commands: Commands) {
     let mut camera = Camera2dBundle::default();
     camera.camera_2d.clear_color =  ClearColorConfig::Custom(Color::BLACK);
     
-    commands.spawn_bundle(camera)
-    .insert_bundle(PickingCameraBundle::default());
+    commands.spawn(camera)
+    .insert(PickingCameraBundle::default());
 }
