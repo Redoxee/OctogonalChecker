@@ -93,7 +93,14 @@ fn create_octogone(octogon_ratio: f32, size: f32, thickness: f32) -> Mesh {
     mesh
 }
 
-fn spawn_tiles(    
+struct StartupParameters {
+    octo_ratio: f32,
+    tile_scale: f32,
+    tile_gap: f32,
+    border: f32,
+}
+
+fn setup_system(    
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>
@@ -102,61 +109,72 @@ fn spawn_tiles(
     let grid_size= 500_f32;
     let tile_scale = grid_size / QUAD_ON_SIDE as f32 * (2_f32.sqrt()/2_f32);
 
-    let octo_ratio = 0.25;
-    let gap = 4.;
+    let parameters = StartupParameters {
+        octo_ratio: 0.25,
+        tile_scale: tile_scale,
+        tile_gap: tile_scale / 2.,
+        border: 4.,
+    };
 
-    let tile_gap = tile_scale / 2.;
-    let tile_map = TileMap::create(OCTO_ON_SIDE);
-    for tile in tile_map.map {
-        let (mesh, material, tile_transform, shape, coord) =  match tile {
-            Tile::Quad(x, y) => {
-                (create_quad(octo_ratio, tile_scale, gap).into(),
-                ColorMaterial::from(Color::RED),
-                Transform::default().with_translation(Vec3::new(x as f32 * tile_gap, y as f32 * tile_gap, 0_f32)),
-                Shape::Quad,
-                TileCoord{x: x as i32,y: y as i32})
-            },
-            Tile::Octo(x, y) => {
-                (create_octogone(octo_ratio, tile_scale, gap).into(),
-                ColorMaterial::from(Color::GRAY),
-                Transform::default().with_translation(Vec3::new(x as f32 * tile_gap, y as f32 * tile_gap, 0_f32)),
-                Shape::Octo,
-                TileCoord{x: x as i32, y: y as i32})
-            }
-        };
-        
-        let bundle = MaterialMesh2dBundle {
-            mesh: meshes.add(mesh).into(),
-            material: materials.add(material),
-            transform: tile_transform,
-            ..default()};
+    spawn_tiles(&mut commands, &mut meshes, &mut materials, &parameters);
+    spawn_pawns(&mut commands, &mut meshes, &mut materials, &parameters);
+}
 
-        commands.spawn_bundle(bundle)
+fn spawn_tiles (
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
+    parameters: &StartupParameters) {
+        let tile_map = TileMap::create(OCTO_ON_SIDE);
+        for tile in tile_map.map {
+            let (mesh, material, tile_transform, shape, coord) =  match tile {
+                Tile::Quad(x, y) => {
+                    (create_quad(parameters.octo_ratio, parameters.tile_scale, parameters.border).into(),
+                    ColorMaterial::from(Color::RED),
+                    Transform::default().with_translation(Vec3::new(x as f32 * parameters.tile_gap, y as f32 * parameters.tile_gap, 0_f32)),
+                    Shape::Quad,
+                    TileCoord{x: x as i32,y: y as i32})
+                },
+                Tile::Octo(x, y) => {
+                    (create_octogone(parameters.octo_ratio, parameters.tile_scale, parameters.border).into(),
+                    ColorMaterial::from(Color::GRAY),
+                    Transform::default().with_translation(Vec3::new(x as f32 * parameters.tile_gap, y as f32 * parameters.tile_gap, 0_f32)),
+                    Shape::Octo,
+                    TileCoord{x: x as i32, y: y as i32})
+                }
+            };
+            
+            let bundle = MaterialMesh2dBundle {
+                mesh: meshes.add(mesh).into(),
+                material: materials.add(material),
+                transform: tile_transform,
+                ..default()};
+    
+            commands.spawn_bundle(bundle)
             .insert(shape)
             .insert(coord)
+            .insert_bundle(PickableBundle::default())
             .insert(Name::new(format!("{} ({})", shape, coord)));
-    }
+        }
 }
 
 fn spawn_pawns (
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    tiles: Query<(&TileCoord)>)
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
+    parameters: &StartupParameters)
 {
-    commands.spawn().insert(Pawn::Top(Some(TileCoord{x: 3, y: 0}))).insert(Name::new("Top"));
-    commands.spawn().insert(Pawn::Top(Some(TileCoord{x: 4, y: 1}))).insert(Name::new("Top"));
-    commands.spawn().insert(Pawn::Top(Some(TileCoord{x: 5, y: 0}))).insert(Name::new("Top"));
-
-    spawn_pawn(commands, meshes, materials, Pawn::Top(Some(TileCoord {x: 3 , y: 1})), tiles);
+    spawn_pawn(commands, meshes, materials, Pawn::Bottom(Some(TileCoord {x: 3 , y: 1})), &parameters);
+    spawn_pawn(commands, meshes, materials, Pawn::Bottom(Some(TileCoord {x: 4 , y: 2})), &parameters);
+    spawn_pawn(commands, meshes, materials, Pawn::Bottom(Some(TileCoord {x: 5 , y: 1})), &parameters);
 }
 
 fn spawn_pawn (
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
     pawn: Pawn,
-    tiles: Query<(&TileCoord)>)
+    parameters : &StartupParameters)
 {
     let (coord, label) = match pawn {
         Pawn::Top(Some(coord)) => (coord, "Top"),
@@ -164,20 +182,18 @@ fn spawn_pawn (
         _=> panic!()
     };
 
+    let factor = parameters.tile_gap;
+    let position = Vec3::new(coord.x as f32 * factor, coord.y as f32 * factor, 1_f32);
+
     commands.spawn_bundle(MaterialMesh2dBundle {
-            mesh: meshes.add(shape::RegularPolygon::new(1_f32, 19).into()).into(),
-            transform: Transform::default().with_translation(Vec3::new(0., 0., 1.)).with_scale(Vec3::splat(32.)),
+            mesh: meshes.add(shape::RegularPolygon::new(1_f32, 32).into()).into(),
+            transform: Transform::default().with_translation(position).with_scale(Vec3::splat(16.)),
             material: materials.add(ColorMaterial::from(Color::BLUE)),
             ..Default::default()
         })
         .insert(pawn)
         .insert(Name::new(label));
 
-}
-
-#[derive(Default)]
-struct SelectedTile {
-    pub entity : Option<Entity>
 }
 
 pub fn input_system(mut events: EventReader<PickingEvent>, tiles: Query<(&TileCoord, &Shape)>) {
@@ -196,7 +212,7 @@ pub fn input_system(mut events: EventReader<PickingEvent>, tiles: Query<(&TileCo
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(spawn_tiles);
+        app.add_startup_system(setup_system);
         
         app.add_plugin(PickingPlugin).add_plugin(InteractablePickingPlugin);
         app.add_system_to_stage(CoreStage::PostUpdate, input_system);
