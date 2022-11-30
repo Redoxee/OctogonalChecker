@@ -22,13 +22,24 @@ use crate::{
 
 pub const OCTO_ON_SIDE: usize = 4;
 pub const QUAD_ON_SIDE: usize = OCTO_ON_SIDE + 1;
-pub const GRID_SIDE: usize = 4;
-pub const NUMBER_OF_TILES: usize = (GRID_SIDE * 2 + 1)  * GRID_SIDE + GRID_SIDE + 1;
-pub const TILES_ON_SIDE: usize = GRID_SIDE * 2 + 1;
+pub const TILES_ON_SIDE: usize = OCTO_ON_SIDE + QUAD_ON_SIDE;
+pub const NUMBER_OF_TILES: usize = TILES_ON_SIDE * TILES_ON_SIDE;
 pub const TILES_ON_ROW: usize = TILES_ON_SIDE;
-pub const TILES_ON_COL: usize = GRID_SIDE + 1;
+pub const TILES_ON_COL: usize = TILES_ON_SIDE;
+
+struct GridVisualParameters {
+    octo_ratio: f32,
+    tile_scale: f32,
+    tile_gap: f32,
+    border: f32,
+}
 
 pub struct GamePlugin {
+}
+
+#[derive(Default, Resource)]
+pub struct SelectedPawn {
+    selected : Option<Entity>
 }
 
 fn create_quad(octogon_ratio: f32, size: f32, thickness: f32) -> Mesh {
@@ -93,13 +104,6 @@ fn create_octogone(octogon_ratio: f32, size: f32, thickness: f32) -> Mesh {
     mesh
 }
 
-struct StartupParameters {
-    octo_ratio: f32,
-    tile_scale: f32,
-    tile_gap: f32,
-    border: f32,
-}
-
 fn setup_system(    
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -109,7 +113,7 @@ fn setup_system(
     let grid_size= 500_f32;
     let tile_scale = grid_size / QUAD_ON_SIDE as f32 * (2_f32.sqrt()/2_f32);
 
-    let parameters = StartupParameters {
+    let parameters = GridVisualParameters {
         octo_ratio: 0.25,
         tile_scale: tile_scale,
         tile_gap: tile_scale / 2.,
@@ -118,13 +122,14 @@ fn setup_system(
 
     spawn_tiles(&mut commands, &mut meshes, &mut materials, &parameters);
     spawn_pawns(&mut commands, &mut meshes, &mut materials, &parameters);
+
 }
 
 fn spawn_tiles (
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
-    parameters: &StartupParameters) {
+    parameters: &GridVisualParameters) {
         let tile_map = TileMap::create(OCTO_ON_SIDE);
         for tile in tile_map.map {
             let (mesh, material, tile_transform, shape, coord) =  match tile {
@@ -162,7 +167,7 @@ fn spawn_pawns (
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
-    parameters: &StartupParameters)
+    parameters: &GridVisualParameters)
 {
     spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 3 , y: 1}, &parameters);
     spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 4 , y: 2}, &parameters);
@@ -179,12 +184,12 @@ fn spawn_pawn (
     materials: &mut ResMut<Assets<ColorMaterial>>,
     player_side: PlayerSide,
     tile_coord: TileCoord,
-    parameters : &StartupParameters)
+    parameters : &GridVisualParameters)
 {
 
-    let label = match player_side {
-        PlayerSide::Top => "Top",
-        PlayerSide::Bottom => "Bottom",
+    let (label, color )= match player_side {
+        PlayerSide::Top => ("Top", Color::BEIGE),
+        PlayerSide::Bottom => ("Bottom", Color::BLUE),
     };
 
     let factor = parameters.tile_gap;
@@ -193,22 +198,62 @@ fn spawn_pawn (
     commands.spawn(MaterialMesh2dBundle {
             mesh: meshes.add(shape::RegularPolygon::new(1_f32, 32).into()).into(),
             transform: Transform::default().with_translation(position).with_scale(Vec3::splat(16.)),
-            material: materials.add(ColorMaterial::from(Color::BLUE)),
+            material: materials.add(ColorMaterial::from(color)),
             ..Default::default()
         })
-        .insert(Pawn{player_side, position: Some(tile_coord)})
+        .insert(Pawn{player_side, coord: tile_coord})
         .insert(Name::new(label));
 
 }
 
-pub fn input_system(mut events: EventReader<PickingEvent>, tiles: Query<(&TileCoord, &Shape)>) {
+pub fn input_system(
+    mut events: EventReader<PickingEvent>, 
+    mut selected_piece: ResMut<SelectedPawn>,
+    tiles : Query<(Entity, &TileCoord, &Shape)>, 
+    mut pawns : Query<(Entity, &mut Pawn)>,
+    mut transforms : Query<&mut Transform>) {
+
     for event in events.iter() {
         match event {
             PickingEvent::Selection(_) => {},
             PickingEvent::Hover(_) => {},
             PickingEvent::Clicked(e) => {
-                if let Ok((coord, shape)) = tiles.get(*e) {
-                    info!("Click : {:?} - {}", shape , coord);
+                if let Ok((tile_entity, tile_coord, shape)) = tiles.get(*e) {
+                    info!("Click : {:?} - {}", shape , tile_coord);
+                    let mut clicked_pawn = None;
+
+                    for (entity, pawn) in pawns.iter() {
+                        if &pawn.coord == tile_coord {
+                            info!("Clicked on a pawn!");
+                            clicked_pawn = Some(entity);
+                            break;
+                        }
+                    }
+
+                    if let Some(pawn) = clicked_pawn {
+                        selected_piece.selected = Some(pawn);
+                    }
+                    else
+                    {
+                        if let Some(selected_entity) = selected_piece.selected {
+                            let target_position = if let Ok(tile_transform) = transforms.get_mut(tile_entity) {
+                                Vec3::new(tile_transform.translation.x, tile_transform.translation.y, 1_f32)
+                            }
+                            else
+                            {
+                                panic!()
+                            };
+
+                            if let Ok((_, mut pawn)) = pawns.get_mut(selected_entity) {
+                                if let Ok(mut pawn_transform) = transforms.get_mut(selected_entity) {
+                                    pawn_transform.translation = target_position;
+                                    pawn.coord = *tile_coord;
+                                }
+                            }
+                        }
+
+                        selected_piece.selected = None;
+                    }
                 }
             },
         }
@@ -218,10 +263,9 @@ pub fn input_system(mut events: EventReader<PickingEvent>, tiles: Query<(&TileCo
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_system);
-        
         app.add_plugin(PickingPlugin).add_plugin(InteractablePickingPlugin);
         app.add_system_to_stage(CoreStage::PostUpdate, input_system);
-        
+        app.insert_resource(SelectedPawn{selected: None});
         #[cfg(feature = "debug")]
         {
             app.register_inspectable::<TileCoord>()

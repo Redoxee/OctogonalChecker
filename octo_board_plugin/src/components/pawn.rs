@@ -10,5 +10,5 @@ pub enum PlayerSide {
 #[derive(Component)]
 pub struct Pawn {
     pub player_side : PlayerSide,
-    pub position : Option<TileCoord>
+    pub coord : TileCoord
 }
