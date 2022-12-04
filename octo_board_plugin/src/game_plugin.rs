@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use bevy::{prelude::*,  
     sprite::MaterialMesh2dBundle, 
     render::mesh::*,
@@ -115,17 +113,16 @@ fn setup_system(
     mut materials: ResMut<Assets<ColorMaterial>>
 ) {
 
-    let tiles = spawn_tiles(&mut commands, &mut meshes, &mut materials, &parameters);
-    spawn_pawns(&mut commands, &parameters, &mut meshes, &mut materials, &tiles);
+    spawn_tiles(&mut commands, &mut meshes, &mut materials, &parameters);
+
 }
 
 fn spawn_tiles (
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
-    parameters: &GridVisualParameters) -> HashMap<TileCoord, Entity> {
+    parameters: &GridVisualParameters) {
         let tile_map = TileMap::create(OCTO_ON_SIDE);
-        let mut result = HashMap::new();
         for tile in tile_map.map {
             let (mesh, material, tile_transform, shape, coord) =  match tile {
                 Tile::Quad(x, y) => {
@@ -150,31 +147,29 @@ fn spawn_tiles (
                 transform: tile_transform,
                 ..default()};
     
-            let tile_id = commands.spawn(bundle)
+            commands.spawn(bundle)
             .insert(shape)
             .insert(coord)
             .insert(PickableBundle::default())
-            .insert(Name::new(format!("{} ({})", shape, coord))).id();
-            result.insert(coord, tile_id);
+            .insert(MaybeEntity {entity: None})
+            .insert(Name::new(format!("{} ({})", shape, coord)));
         }
-
-    result
 }
 
 
-fn spawn_pawns(
-    commands: &mut Commands,
-    parameters: &Res<GridVisualParameters>,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
-    tiles : &HashMap<TileCoord, Entity>) {
-        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Bottom, TileCoord {x: 3 , y: 1}, &parameters);
-        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Bottom, TileCoord {x: 4 , y: 2}, &parameters);
-        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Bottom, TileCoord {x: 5 , y: 1}, &parameters);
+fn spawn_pawn_system(
+    mut commands: Commands,
+    parameters: Res<GridVisualParameters>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut tiles : Query<(Entity, &TileCoord, &mut MaybeEntity), With<Shape>>) {
+        spawn_pawn(&mut commands, &mut meshes,&mut materials, &mut tiles, PlayerSide::Bottom, TileCoord {x: 3 , y: 1}, &parameters);
+        spawn_pawn(&mut commands, &mut meshes,&mut materials, &mut tiles, PlayerSide::Bottom, TileCoord {x: 4 , y: 2}, &parameters);
+        spawn_pawn(&mut commands, &mut meshes,&mut materials, &mut tiles, PlayerSide::Bottom, TileCoord {x: 5 , y: 1}, &parameters);
         
-        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Top, TileCoord {x: 3 , y: 7}, &parameters);
-        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Top, TileCoord {x: 4 , y: 6}, &parameters);
-        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Top, TileCoord {x: 5 , y: 7}, &parameters);
+        spawn_pawn(&mut commands, &mut meshes,&mut materials, &mut tiles, PlayerSide::Top, TileCoord {x: 3 , y: 7}, &parameters);
+        spawn_pawn(&mut commands, &mut meshes,&mut materials, &mut tiles, PlayerSide::Top, TileCoord {x: 4 , y: 6}, &parameters);
+        spawn_pawn(&mut commands, &mut meshes,&mut materials, &mut tiles, PlayerSide::Top, TileCoord {x: 5 , y: 7}, &parameters);
 }
 
 macro_rules! unwrap_option_or {
@@ -193,7 +188,7 @@ fn spawn_pawn (
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
-    tiles : &HashMap<TileCoord, Entity>,
+    tiles: &mut Query<(Entity, &TileCoord, &mut MaybeEntity), With<Shape>>,
     player_side: PlayerSide,
     tile_coord: TileCoord,
     parameters : & GridVisualParameters) {
@@ -203,13 +198,13 @@ fn spawn_pawn (
         PlayerSide::Bottom => ("Bottom", Color::BLUE),
     };
 
-    let tile = tiles.get(&tile_coord);
-    let tile = unwrap_option_or!(tile, panic!("Creating a pawn on a non existing tile {:?}, {}", tile_coord, tiles.len()));
+    let tile = tiles.iter_mut().find(|t| t.1 == &tile_coord);
+    let mut tile = unwrap_option_or!(tile, panic!("Creating a pawn on a non existing tile"));
 
     let factor = parameters.tile_gap;
     let position = Vec3::new(tile_coord.x as f32 * factor, tile_coord.y as f32 * factor, 1_f32);
 
-    commands.spawn(MaterialMesh2dBundle {
+    let pawn_entity = commands.spawn(MaterialMesh2dBundle {
             mesh: meshes.add(shape::RegularPolygon::new(1_f32, 32).into()).into(),
             transform: Transform::default().with_translation(position).with_scale(Vec3::splat(16.)),
             material: materials.add(ColorMaterial::from(color)),
@@ -217,7 +212,9 @@ fn spawn_pawn (
         })
         .insert(Pawn{player_side, coord: tile_coord})
         .insert(Name::new(label))
-        .insert(MaybeEntity{entity: Some(*tile)});
+        .insert(MaybeEntity{entity: Some(tile.0)}).id();
+
+        tile.2.entity = Some(pawn_entity);
 }
 
 pub fn input_system(
@@ -270,11 +267,11 @@ pub fn input_system(
                                 let target_entity = maybe_entities.get_mut(pawn_entity);
                                 let mut target_entity = unwrap_result_or!(target_entity, panic!());
                                 target_entity.entity = Some(clicked_tile);
+                                
+                                let source_tile = maybe_entities.get_mut(selected_pawn);
+                                let mut source_tile = unwrap_result_or!(source_tile, panic!());
+                                source_tile.entity = None;
                             }
-
-                            let source_tile = maybe_entities.get_mut(selected_pawn);
-                            let mut source_tile = unwrap_result_or!(source_tile, panic!());
-                            source_tile.entity = None;
                         }
 
                         selected_piece.selected = None;
@@ -289,6 +286,7 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_system);
         app.add_plugin(PickingPlugin).add_plugin(InteractablePickingPlugin);
+        app.add_startup_system_to_stage(StartupStage::PostStartup, spawn_pawn_system);
         app.add_system_to_stage(CoreStage::PostUpdate, input_system);
         app.insert_resource(SelectedPawn{selected: None});
 
