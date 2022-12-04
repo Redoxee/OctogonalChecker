@@ -1,4 +1,4 @@
-use bevy::prelude::Component;
+use bevy::prelude::{Component};
 
 use crate::components::tile_coord::*;
 

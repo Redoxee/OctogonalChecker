@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::{prelude::*,  
     sprite::MaterialMesh2dBundle, 
     render::mesh::*,
@@ -17,6 +19,7 @@ use crate::{
         tile_coord::*,
         shape::*,
         pawn::*,
+        maybe::*,
     }
 };
 
@@ -27,6 +30,7 @@ pub const NUMBER_OF_TILES: usize = TILES_ON_SIDE * TILES_ON_SIDE;
 pub const TILES_ON_ROW: usize = TILES_ON_SIDE;
 pub const TILES_ON_COL: usize = TILES_ON_SIDE;
 
+#[derive(Resource)]
 struct GridVisualParameters {
     octo_ratio: f32,
     tile_scale: f32,
@@ -106,31 +110,22 @@ fn create_octogone(octogon_ratio: f32, size: f32, thickness: f32) -> Mesh {
 
 fn setup_system(    
     mut commands: Commands,
+    parameters: Res<GridVisualParameters>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>
 ) {
 
-    let grid_size= 500_f32;
-    let tile_scale = grid_size / QUAD_ON_SIDE as f32 * (2_f32.sqrt()/2_f32);
-
-    let parameters = GridVisualParameters {
-        octo_ratio: 0.25,
-        tile_scale: tile_scale,
-        tile_gap: tile_scale / 2.,
-        border: 4.,
-    };
-
-    spawn_tiles(&mut commands, &mut meshes, &mut materials, &parameters);
-    spawn_pawns(&mut commands, &mut meshes, &mut materials, &parameters);
-
+    let tiles = spawn_tiles(&mut commands, &mut meshes, &mut materials, &parameters);
+    spawn_pawns(&mut commands, &parameters, &mut meshes, &mut materials, &tiles);
 }
 
 fn spawn_tiles (
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
-    parameters: &GridVisualParameters) {
+    parameters: &GridVisualParameters) -> HashMap<TileCoord, Entity> {
         let tile_map = TileMap::create(OCTO_ON_SIDE);
+        let mut result = HashMap::new();
         for tile in tile_map.map {
             let (mesh, material, tile_transform, shape, coord) =  match tile {
                 Tile::Quad(x, y) => {
@@ -155,42 +150,61 @@ fn spawn_tiles (
                 transform: tile_transform,
                 ..default()};
     
-            commands.spawn(bundle)
+            let tile_id = commands.spawn(bundle)
             .insert(shape)
             .insert(coord)
             .insert(PickableBundle::default())
-            .insert(Name::new(format!("{} ({})", shape, coord)));
+            .insert(Name::new(format!("{} ({})", shape, coord))).id();
+            result.insert(coord, tile_id);
         }
+
+    result
 }
 
-fn spawn_pawns (
+
+fn spawn_pawns(
     commands: &mut Commands,
+    parameters: &Res<GridVisualParameters>,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
-    parameters: &GridVisualParameters)
-{
-    spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 3 , y: 1}, &parameters);
-    spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 4 , y: 2}, &parameters);
-    spawn_pawn(commands, meshes, materials, PlayerSide::Bottom, TileCoord {x: 5 , y: 1}, &parameters);
-    
-    spawn_pawn(commands, meshes, materials, PlayerSide::Top, TileCoord {x: 3 , y: 7}, &parameters);
-    spawn_pawn(commands, meshes, materials, PlayerSide::Top, TileCoord {x: 4 , y: 6}, &parameters);
-    spawn_pawn(commands, meshes, materials, PlayerSide::Top, TileCoord {x: 5 , y: 7}, &parameters);
+    tiles : &HashMap<TileCoord, Entity>) {
+        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Bottom, TileCoord {x: 3 , y: 1}, &parameters);
+        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Bottom, TileCoord {x: 4 , y: 2}, &parameters);
+        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Bottom, TileCoord {x: 5 , y: 1}, &parameters);
+        
+        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Top, TileCoord {x: 3 , y: 7}, &parameters);
+        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Top, TileCoord {x: 4 , y: 6}, &parameters);
+        spawn_pawn(commands, meshes, materials, &tiles, PlayerSide::Top, TileCoord {x: 5 , y: 7}, &parameters);
+}
+
+macro_rules! unwrap_option_or {
+    ($e:expr, $or_do_what:expr) => {
+        if let Some(d) = $e { d } else { $or_do_what }
+    };
+}
+
+macro_rules! unwrap_result_or {
+    ($e:expr, $or_do_what:expr) => {
+        if let Ok(d) = $e { d } else { $or_do_what }
+    };
 }
 
 fn spawn_pawn (
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    tiles : &HashMap<TileCoord, Entity>,
     player_side: PlayerSide,
     tile_coord: TileCoord,
-    parameters : &GridVisualParameters)
-{
+    parameters : & GridVisualParameters) {
 
     let (label, color )= match player_side {
         PlayerSide::Top => ("Top", Color::BEIGE),
         PlayerSide::Bottom => ("Bottom", Color::BLUE),
     };
+
+    let tile = tiles.get(&tile_coord);
+    let tile = unwrap_option_or!(tile, panic!("Creating a pawn on a non existing tile {:?}, {}", tile_coord, tiles.len()));
 
     let factor = parameters.tile_gap;
     let position = Vec3::new(tile_coord.x as f32 * factor, tile_coord.y as f32 * factor, 1_f32);
@@ -202,15 +216,16 @@ fn spawn_pawn (
             ..Default::default()
         })
         .insert(Pawn{player_side, coord: tile_coord})
-        .insert(Name::new(label));
-
+        .insert(Name::new(label))
+        .insert(MaybeEntity{entity: Some(*tile)});
 }
 
 pub fn input_system(
     mut events: EventReader<PickingEvent>, 
     mut selected_piece: ResMut<SelectedPawn>,
-    tiles : Query<(Entity, &TileCoord, &Shape)>, 
+    mut tiles : Query<(Entity, &TileCoord, &Shape)>, 
     mut pawns : Query<(Entity, &mut Pawn)>,
+    mut maybe_entities : Query<&mut MaybeEntity>,
     mut transforms : Query<&mut Transform>) {
 
     for event in events.iter() {
@@ -218,16 +233,16 @@ pub fn input_system(
             PickingEvent::Selection(_) => {},
             PickingEvent::Hover(_) => {},
             PickingEvent::Clicked(e) => {
-                if let Ok((tile_entity, tile_coord, shape)) = tiles.get(*e) {
+                if let Ok((clicked_tile, tile_coord, shape)) = tiles.get_mut(*e) {
                     info!("Click : {:?} - {}", shape , tile_coord);
+                    let mut pawn_holder = unwrap_result_or!(maybe_entities.get_mut(clicked_tile), panic!());
+                    
                     let mut clicked_pawn = None;
-
-                    for (entity, pawn) in pawns.iter() {
-                        if &pawn.coord == tile_coord {
-                            info!("Clicked on a pawn!");
-                            clicked_pawn = Some(entity);
-                            break;
-                        }
+                    if let Some(clicked_pawn_entity) = pawn_holder.entity {
+                        if let Ok(clicked) = pawns.get_mut(clicked_pawn_entity)
+                        {
+                            clicked_pawn = Some(clicked.0);
+                        } 
                     }
 
                     if let Some(pawn) = clicked_pawn {
@@ -235,21 +250,31 @@ pub fn input_system(
                     }
                     else
                     {
-                        if let Some(selected_entity) = selected_piece.selected {
-                            let target_position = if let Ok(tile_transform) = transforms.get_mut(tile_entity) {
+                        if let Some(selected_pawn) = selected_piece.selected {
+                            let target_position = if let Ok(tile_transform) = transforms.get_mut(clicked_tile) {
                                 Vec3::new(tile_transform.translation.x, tile_transform.translation.y, 1_f32)
                             }
                             else
                             {
                                 panic!()
                             };
-
-                            if let Ok((_, mut pawn)) = pawns.get_mut(selected_entity) {
-                                if let Ok(mut pawn_transform) = transforms.get_mut(selected_entity) {
+                            
+                            if let Ok((pawn_entity, mut pawn)) = pawns.get_mut(selected_pawn) {
+                                if let Ok(mut pawn_transform) = transforms.get_mut(selected_pawn) {
                                     pawn_transform.translation = target_position;
                                     pawn.coord = *tile_coord;
                                 }
+                                
+                                pawn_holder.entity = Some(pawn_entity);
+
+                                let target_entity = maybe_entities.get_mut(pawn_entity);
+                                let mut target_entity = unwrap_result_or!(target_entity, panic!());
+                                target_entity.entity = Some(clicked_tile);
                             }
+
+                            let source_tile = maybe_entities.get_mut(selected_pawn);
+                            let mut source_tile = unwrap_result_or!(source_tile, panic!());
+                            source_tile.entity = None;
                         }
 
                         selected_piece.selected = None;
@@ -266,6 +291,18 @@ impl Plugin for GamePlugin {
         app.add_plugin(PickingPlugin).add_plugin(InteractablePickingPlugin);
         app.add_system_to_stage(CoreStage::PostUpdate, input_system);
         app.insert_resource(SelectedPawn{selected: None});
+
+        let grid_size= 500_f32;
+        let tile_scale = grid_size / QUAD_ON_SIDE as f32 * (2_f32.sqrt()/2_f32);
+        let parameters = GridVisualParameters {
+            octo_ratio: 0.25,
+            tile_scale: tile_scale,
+            tile_gap: tile_scale / 2.,
+            border: 4.,
+        };
+
+        app.insert_resource(parameters);
+
         #[cfg(feature = "debug")]
         {
             app.register_inspectable::<TileCoord>()
